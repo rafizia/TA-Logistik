@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+langchain
+langchain-ollama
+langchain-community
+langchain-openai
+langchain-experimental
+psycopg2-binary
+sqlalchemy

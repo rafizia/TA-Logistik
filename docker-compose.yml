@@ -20,6 +20,8 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=paragon
+    ports:
+      - "5433:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
@@ -224,3 +226,17 @@ services:
       - tms_net
     security_opt:
       - seccomp=unconfined
+
+  ai-service:
+    build: ./ai-service
+    container_name: ai_agent_service
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@api_gateway_db:5432/paragon
+    networks:
+      - tms_net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - db
