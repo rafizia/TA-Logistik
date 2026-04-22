@@ -7,3 +7,5 @@ langchain-openai
 langchain-experimental
 psycopg2-binary
 sqlalchemy
+langchain-google-genai
+python-dotenv
