@@ -8,7 +8,7 @@ import SidebarAdmin from './components/SidebarAdmin';
 
 import { SystemDesign, Login, Dashboard, ViewAllLokasi, ViewAllTruksAdmin, NotFound, ViewAllTrucks, DashboardAdmin, 
     ViewAllLokasiAdmin, ViewAllUserAdmin, ViewAllRoleAdmin, ViewLokasiAdmin, ViewAllProdukAdmin, 
-    ViewAllProduk, ViewLocation, ViewAllProductLineAdmin, ViewAllProductLine } from './pages';
+    ViewAllProduk, ViewLocation, ViewAllProductLineAdmin, ViewAllProductLine, CreateTrukAdmin, UpdateTrukAdmin, CreateLokasiAdmin, UpdateLokasiAdmin } from './pages';
 
 import PrivateRoute from './utils/private-route';
 
@@ -65,6 +65,8 @@ function ProtectedRoutes() {
           <Route path="/administrator/role" element={<PrivateRoute><SidebarAdmin role={true} title="Daftar Role"><ViewAllRoleAdmin /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/truk" element={<PrivateRoute><SidebarAdmin truk={true} title="Daftar Truk"><ViewAllTruksAdmin /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/lokasi" element={<PrivateRoute><SidebarAdmin lokasi={true} title="Daftar Lokasi"><ViewAllLokasiAdmin /></SidebarAdmin></PrivateRoute>} />
+          <Route path="/administrator/lokasi/buat" element={<PrivateRoute><SidebarAdmin lokasi={true} title="Buat Lokasi"><CreateLokasiAdmin /></SidebarAdmin></PrivateRoute>} />
+          <Route path="/administrator/lokasi/update" element={<PrivateRoute><SidebarAdmin lokasi={true} title="Ubah Lokasi"><UpdateLokasiAdmin /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/product" element={<PrivateRoute><SidebarAdmin product={true} title="Daftar Product"><ViewAllProdukAdmin /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/lokasi/:lokasiId" element={<PrivateRoute><SidebarAdmin lokasi={true} title="Detail Lokasi"><ViewLokasiAdmin /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/customer" element={<PrivateRoute><SidebarAdmin customer={true} title="Daftar Customer"><ViewAllCostumerAdmin /></SidebarAdmin></PrivateRoute>} />
@@ -75,13 +77,18 @@ function ProtectedRoutes() {
           <Route path="/administrator/product-line" element={<PrivateRoute><SidebarAdmin productLine={true} title="Daftar Product Line"><ViewAllProductLineAdmin /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/pengiriman/select-do-automate" element={<PrivateRoute><SidebarAdmin shipment={true} title="Otomatisasi Pengiriman"><DoSelectAutomateAdmin /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/pengiriman/select-do-manual" element={<PrivateRoute><SidebarAdmin shipment={true} title="Pengiriman Manual"><DoSelectManualAdmin /></SidebarAdmin></PrivateRoute>} />
+          <Route path="/administrator/truk/buat" element={<PrivateRoute><SidebarAdmin truk={true} title="Tambah Truk"><CreateTrukAdmin /></SidebarAdmin></PrivateRoute>} />
+          <Route path="/administrator/truk/update" element={<PrivateRoute><SidebarAdmin truk={true} title="Ubah Truk"><UpdateTrukAdmin /></SidebarAdmin></PrivateRoute>} />
         </>
       ) : (
         <>
           {/* User Routes */}
           <Route path="/dashboard" element={<PrivateRoute><Sidebar beranda={true} title="Beranda"><Dashboard /></Sidebar></PrivateRoute>} />
           <Route path="/truk" element={<PrivateRoute><Sidebar truk={true} title="Daftar Truk"><ViewAllTrucks /></Sidebar></PrivateRoute>} />
+          <Route path="/truk/update" element={<PrivateRoute><Sidebar truk={true} title="Ubah Truk"><UpdateTrukAdmin /></Sidebar></PrivateRoute>} />
           <Route path="/lokasi" element={<PrivateRoute><Sidebar lokasi={true} title="Daftar Lokasi"><ViewAllLokasi /></Sidebar></PrivateRoute>} />
+          <Route path="/lokasi/buat" element={<PrivateRoute><Sidebar lokasi={true} title="Buat Lokasi"><CreateLokasiAdmin /></Sidebar></PrivateRoute>} />
+          <Route path="/lokasi/update" element={<PrivateRoute><Sidebar lokasi={true} title="Ubah Lokasi"><UpdateLokasiAdmin /></Sidebar></PrivateRoute>} />
           <Route path="/lokasi/:lokasiId" element={<PrivateRoute><Sidebar lokasi={true} title="Detail Lokasi"><ViewLocation /></Sidebar></PrivateRoute>} />
           <Route path="/delivery-order" element={<PrivateRoute><Sidebar deliveryOrder={true} title="Delivery Order"><ViewAllDo /></Sidebar></PrivateRoute>} />
           <Route path="/delivery-order/:doId" element={<PrivateRoute><Sidebar deliveryOrder={true} title="Delivery Order"><DODetailPage /></Sidebar></PrivateRoute>} />
