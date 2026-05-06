@@ -12,6 +12,8 @@ from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_core.prompts import PromptTemplate
 from langchain.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
+from sqlalchemy import text
+from langchain_groq import ChatGroq
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
@@ -23,6 +25,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Database configuration
+# - Inside Docker: host 'db', port 5432
+# - Local Dev: host 'localhost', port 5433
+default_db_url = "postgresql+psycopg2://postgres:postgres@localhost:5433/paragon"
+pg_uri = os.getenv("DATABASE_URL", default_db_url)
+
+if pg_uri.startswith("postgresql://"):
+    pg_uri = pg_uri.replace("postgresql://", "postgresql+psycopg2://", 1)
+
+db = SQLDatabase.from_uri(pg_uri)
 
 @tool
 def system_control(query: str) -> str:
@@ -39,6 +52,98 @@ def system_control(query: str) -> str:
     except Exception:
         return f"SUCCESS:NAVIGATE:{query}"
 
+@tool
+def get_available_options(query: str = "") -> str:
+    """
+    Fetches available dropdown options for trucks:
+    - Vehicle Types (name and id)
+    - Distribution Centers (name and id)
+    - Valid Statuses (TruckFirstStatus and TruckSecondStatus)
+    Use this before creating or updating a truck to ensure you have the correct IDs and enum values.
+    """
+    try:
+        # Get Vehicle Types
+        types = db.run("SELECT id, name FROM truck_type")
+        # Get DCs
+        dcs = db.run("SELECT id, name FROM dc")
+        
+        # Static Statuses (extracted from DB earlier)
+        first_statuses = ["AVAILABLE", "UNAVAILABLE"]
+        second_statuses = ["ON_DELIVERY", "OUT_OF_STOCK", "ARCHIVE", "MAINTENANCE", "LEGAL"]
+        
+        result = {
+            "vehicle_types": types,
+            "distribution_centers": dcs,
+            "first_statuses": first_statuses,
+            "second_statuses": second_statuses
+        }
+        return json.dumps(result)
+    except Exception as e:
+        return f"Error fetching options: {str(e)}"
+
+@tool
+def manage_truck(query: str) -> str:
+    """
+    Use this tool for CREATE, UPDATE, or DELETE operations on truck entities.
+    Input must be a JSON string with:
+    - action: 'CREATE', 'UPDATE', or 'DELETE'
+    - data: dictionary of truck fields.
+    For CREATE: requires plate_number, type_id, dc_id, first_status, created_by.
+    For UPDATE/DELETE: requires plate_number or id.
+    Example: {"action": "CREATE", "data": {"plate_number": "B 1234 XY", "type_id": 1, "dc_id": 1, "first_status": "AVAILABLE", "created_by": "AI_Agent"}}
+    """
+    try:
+        payload = json.loads(query)
+        action = payload.get("action").upper()
+        data = payload.get("data", {})
+        
+        if action == "CREATE":
+            # Basic validation
+            required = ["plate_number", "type_id", "dc_id", "first_status"]
+            for field in required:
+                if field not in data:
+                    return f"ERROR: Missing required field '{field}' for CREATE."
+            
+            return f"SUCCESS:PREFILL:add_truck:{json.dumps(data)}"
+            
+        elif action == "UPDATE":
+            identifier = data.get("plate_number") or data.get("id")
+            if not identifier:
+                return "ERROR: Missing plate_number or id for UPDATE."
+            
+            # Build dynamic update query
+            updates = []
+            params = {}
+            for k, v in data.items():
+                if k not in ["plate_number", "id"]:
+                    updates.append(f"{k} = :{k}")
+                    params[k] = v
+            
+            if not updates:
+                return "ERROR: No fields to update."
+            
+            where_clause = "plate_number = :ident" if data.get("plate_number") else "id = :ident"
+            params["ident"] = identifier
+            
+            sql = text(f"UPDATE truck SET {', '.join(updates)} WHERE {where_clause}")
+            db._engine.connect().execute(sql, params)
+            return f"SUCCESS: Truck {identifier} updated successfully."
+            
+        elif action == "DELETE":
+            identifier = data.get("plate_number") or data.get("id")
+            if not identifier:
+                return "ERROR: Missing plate_number or id for DELETE."
+            
+            where_clause = "plate_number = :ident" if data.get("plate_number") else "id = :ident"
+            sql = text(f"DELETE FROM truck WHERE {where_clause}")
+            db._engine.connect().execute(sql, {"ident": identifier})
+            return f"SUCCESS: Truck {identifier} deleted successfully."
+            
+        return "ERROR: Invalid action."
+    except Exception as e:
+        return f"ERROR: {str(e)}"
+
+'''
 llm = ChatGoogleGenerativeAI(
     model="gemini-3-flash-preview",
     temperature=0,
@@ -47,20 +152,20 @@ llm = ChatGoogleGenerativeAI(
     max_retries=2,
 )
 
+llm = ChatGroq(
+    model="qwen/qwen3-32b",
+    temperature=0.6,
+    max_completion_tokens=4096,
+    top_p=0.95,
+    reasoning_effort="default",
+    stream=True,
+    stop=None
+)'''
+
+llm = ChatOllama(model="qwen3.5:9b", base_url="http://152.118.31.57:11434")
 #llm = ChatOllama(model="llama3.1", num_ctx=2048, base_url="http://host.docker.internal:11434")
-#llm = ChatOllama(model="llama3.1", base_url="http://host.docker.internal:11434")
-tools = [system_control]
+tools = [system_control, get_available_options, manage_truck]
 
-# Database configuration
-# - Inside Docker: host 'db', port 5432
-# - Local Dev: host 'localhost', port 5433
-default_db_url = "postgresql+psycopg2://postgres:postgres@localhost:5433/paragon"
-pg_uri = os.getenv("DATABASE_URL", default_db_url)
-
-if pg_uri.startswith("postgresql://"):
-    pg_uri = pg_uri.replace("postgresql://", "postgresql+psycopg2://", 1)
-
-db = SQLDatabase.from_uri(pg_uri)
 toolkit = SQLDatabaseToolkit(db=db, llm=llm)
 
 template = """You are a specialized Logistics Data Analyst for the 'Routing App'.
@@ -69,8 +174,6 @@ SCOPE RULES:
 1. Your domain includes: Ships, Trucks, Delivery Orders, Products, Locations, and Distribution Centers.
 2. Questions about categories, counts, or details of the items above ARE allowed.
 3. If the user asks about completely unrelated topics (e.g., cooking, politics, general trivia), politely refuse in Indonesian.
-
-DO NOT make any DML statements (INSERT, UPDATE, DELETE, DROP etc.) to the database.
 
 You have access to the following tools:
 {tools}
@@ -131,18 +234,26 @@ Actions:
 - edit_existing_location: Edit an existing location
 - view_dashboard: View dashboard
 
+DATA OPERATIONS (CRUD):
+1. 'manage_truck' -> Used to create, modify, or delete trucks.
+- Always use `get_available_options` first if the user provides names (like "Blind Van" or "DC Jakarta") instead of IDs, to find the correct `type_id`, `dc_id`, or status enum values.
+- CREATE conditions: Must have a license plate, type_id, dc_id, first_status, and created_by.
+- DELETE/UPDATE conditions: Must have a truck ID or plate_number.
+
 EXECUTION RULES:
-- If the user wants to "view," "open," or "show," use action_type='NAVIGATE'.
-- If the user wants to "add," "create," or "input," use action_type='ACTION'.
+- If the user wants to "view," "open," or "show," use action_type='NAVIGATE' with `system_control`.
+- If the user wants to "add," "create," "update," or "delete" data, use the appropriate CRUD tool (like `manage_truck`).
+- If you need to navigate the user after a successful data operation, you can do so in a subsequent thought/action.
 
 Begin!
 
 Question: {input}
+Chat History: {history}
 Thought:{agent_scratchpad}
 """
 
 PROMPT = PromptTemplate(
-    input_variables=["input", "agent_scratchpad", "tools", "tool_names"],
+    input_variables=["input", "agent_scratchpad", "tools", "tool_names", "history"],
     template=template
 )
 
@@ -157,11 +268,21 @@ agent_executor = create_sql_agent(
 
 class ChatRequest(BaseModel):
     query: str
+    history: list = []
 
 @app.post("/chat")
 async def chat_with_ai(request: ChatRequest):
     try:
-        response = agent_executor.invoke(request.query)
+        # Format history for the prompt
+        history_text = ""
+        for msg in request.history:
+            sender = "User" if msg.get("sender") == "user" else "AI"
+            history_text += f"{sender}: {msg.get('text')}\n"
+            
+        response = agent_executor.invoke({
+            "input": request.query,
+            "history": history_text
+        })
 
         # debug
         print("AI response:", response)
@@ -178,7 +299,6 @@ async def chat_with_ai(request: ChatRequest):
                     target = tool_input.get("target_page", "dashboard")
                 else:
                     try:
-                        import json
                         parsed = json.loads(tool_input)
                         action_type = parsed.get("action_type", "NAVIGATE")
                         target = parsed.get("target_page", "dashboard")
@@ -190,6 +310,30 @@ async def chat_with_ai(request: ChatRequest):
                      "type": action_type,
                      "target": target
                 }
+            elif "SUCCESS:PREFILL:" in str(observation):
+                obs_str = str(observation)
+                try:
+                    parts = obs_str.split(":", 3)
+                    target = parts[2] if len(parts) > 2 else "dashboard"
+                    
+                    json_start = obs_str.find("{")
+                    json_end = obs_str.rfind("}")
+                    if json_start != -1 and json_end != -1:
+                        json_str = obs_str[json_start:json_end+1]
+                        payload_data = json.loads(json_str)
+                    else:
+                        payload_data = {}
+                        
+                    command_payload = {
+                        "type": "PREFILL",
+                        "target": target,
+                        "data": payload_data
+                    }
+                except Exception as e:
+                    print(f"Error parsing PREFILL observation: {e}")
+                    command_payload = None
+            
+            if command_payload:
                 break
                 
         if not reply_text and command_payload:

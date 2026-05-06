@@ -1,5 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { BsXLg, BsArrowRightCircleFill } from 'react-icons/bs';
+import { useNavigate } from 'react-router-dom';
+import jwtDecode from 'jwt-decode';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 export default function AIChatbox({ onClose }) {
   const [messages, setMessages] = useState([
@@ -12,6 +16,7 @@ export default function AIChatbox({ onClose }) {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const navigate = useNavigate();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -44,7 +49,10 @@ export default function AIChatbox({ onClose }) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ query: userText }),
+        body: JSON.stringify({ 
+          query: userText,
+          history: messages 
+        }),
       });
 
       if (!response.ok) {
@@ -52,18 +60,67 @@ export default function AIChatbox({ onClose }) {
       }
 
       const data = await response.json();
+      const aiReply = data.reply;
       
-      const aiResponseText = data.response || data.reply || data.answer || data.message || (typeof data === 'string' ? data : JSON.stringify(data));
+      if (data.command) {
+        const { type, target } = data.command;
+
+        const routeMap = {
+          'shipments_list': '/shipment',
+          'add_shipment': '/shipment/tambah',
+          'edit_shipment': '/shipment/edit',
+          'trucks_list': '/truk',
+          'add_truck': '/truk/buat',
+          'edit_truck': '/truk/edit',
+          'delivery_orders_list': '/delivery-order',
+          'add_delivery_order': '/delivery-order/tambah',
+          'edit_delivery_order': '/delivery-order/edit',
+          'locations_list': '/lokasi',
+          'add_location': '/lokasi/tambah',
+          'edit_location': '/lokasi/edit',
+          'dashboard': '/dashboard',
+          'products_line_list': '/product-line',
+          'add_product_line': '/product-line/tambah',
+          'edit_product_line': '/product-line/edit',
+          'products_list': '/product',
+          'add_product': '/product/tambah',
+          'edit_product': '/product/edit',
+          'customers_list': '/customer',
+          'add_customer': '/customer/tambah',
+          'edit_customer': '/customer/edit',
+          'users_list': '/user',
+          'add_user': '/user/tambah',
+          'edit_user': '/user/edit',
+          'roles_list': '/role',
+          'add_role': '/role/tambah',
+          'edit_role': '/role/edit',
+        };
+
+        if (routeMap[target]) {
+          try {
+            const token = sessionStorage.getItem('token');
+            let userRole = '';
+            if (token) {
+              const decodedToken = jwtDecode(token);
+              userRole = decodedToken.role?.name;
+            }
+            const basePath = userRole === 'Super' ? '/administrator' : '';
+            navigate(`${basePath}${routeMap[target]}`, { state: data.command.data });
+          } catch (error) {
+            console.error('Error saat decode token untuk navigasi', error);
+          }
+        }
+      }
 
       setMessages((prev) => [
         ...prev,
-        { sender: 'ai', text: aiResponseText },
+        { sender: 'ai', text: aiReply },
       ]);
     } catch (error) {
       console.error('Error fetching AI response:', error);
       setMessages((prev) => [
         ...prev,
-        { sender: 'ai', text: 'Maaf, gagal terhubung ke backend AI atau terjadi kesalahan server.' },
+        { sender: 'ai', text: 'Maaf, gagal terhubung ke agen AI atau terjadi kesalahan server.' },
       ]);
     } finally {
       setIsLoading(false);
@@ -106,7 +163,24 @@ export default function AIChatbox({ onClose }) {
                   : 'bg-[#D1D3D4] text-[#333] rounded-[14px] rounded-tl-[4px]'
               }`}
             >
-              {msg.text}
+              <ReactMarkdown 
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  p: ({node, ...props}) => <p className="mb-0" {...props} />,
+                  ul: ({node, ...props}) => <ul className="list-disc ml-4 mb-2" {...props} />,
+                  ol: ({node, ...props}) => <ol className="list-decimal ml-4 mb-2" {...props} />,
+                  li: ({node, ...props}) => <li className="mb-1" {...props} />,
+                  table: ({node, ...props}) => (
+                    <div className="overflow-x-auto my-2">
+                      <table className="min-w-full border-collapse border border-gray-400 text-[11px]" {...props} />
+                    </div>
+                  ),
+                  th: ({node, ...props}) => <th className="border border-gray-400 px-2 py-1 bg-gray-200" {...props} />,
+                  td: ({node, ...props}) => <td className="border border-gray-400 px-2 py-1" {...props} />,
+                }}
+              >
+                {msg.text}
+              </ReactMarkdown>
             </div>
           </div>
         ))}
