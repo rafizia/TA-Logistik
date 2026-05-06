@@ -111,23 +111,24 @@ def manage_truck(query: str) -> str:
             if not identifier:
                 return "ERROR: Missing plate_number or id for UPDATE."
             
-            # Build dynamic update query
-            updates = []
-            params = {}
-            for k, v in data.items():
-                if k not in ["plate_number", "id"]:
-                    updates.append(f"{k} = :{k}")
-                    params[k] = v
+            # Cari id truk berdasarkan plat nomor
+            truck_id = data.get("id")
+            if not truck_id:
+                sql = text("SELECT id FROM truck WHERE plate_number = :plate")
+                result = db._engine.connect().execute(sql, {"plate": identifier}).fetchone()
+                if not result:
+                    return f"ERROR: Truck with plate {identifier} not found."
+                truck_id = result[0]
             
-            if not updates:
-                return "ERROR: No fields to update."
-            
-            where_clause = "plate_number = :ident" if data.get("plate_number") else "id = :ident"
-            params["ident"] = identifier
-            
-            sql = text(f"UPDATE truck SET {', '.join(updates)} WHERE {where_clause}")
-            db._engine.connect().execute(sql, params)
-            return f"SUCCESS: Truck {identifier} updated successfully."
+            # Prepare data for pre-fill
+            prefill_data = {
+                "Id": truck_id,
+                "prefill": {
+                    "dc_id": data.get("dc_id"),
+                    "status": data.get("status") or data.get("first_status") or data.get("second_status") or data.get("third_status")
+                }
+            }
+            return f"SUCCESS:PREFILL:edit_truck:{json.dumps(prefill_data)}"
             
         elif action == "DELETE":
             identifier = data.get("plate_number") or data.get("id")
