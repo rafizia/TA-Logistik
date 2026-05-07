@@ -20,6 +20,8 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=paragon
+    #ports:
+      #- "5433:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
@@ -90,7 +92,7 @@ services:
     pull_policy: build
     image: custom-api-gateway:local
     ports:
-      - "28080:8080"
+      - "8080:8080"
     container_name: e2e_logistics_api_gateway
     depends_on:
       db:
