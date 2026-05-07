@@ -171,10 +171,25 @@ const getLocationByListId = async (list_id) => {
   }
 };
 
+async function createLocation(data) {
+  return await prisma.location.create({
+    data: data,
+  });
+}
+
+async function updateLocation(id, data) {
+  return await prisma.location.update({
+    where: { id: id },
+    data: data,
+  });
+}
+
 export {
   getAllLocationsAdmin,
   getAllLocations,
   getLocationByID,
   getLocationByListId,
   getDCLocations,
+  createLocation,
+  updateLocation,
 };

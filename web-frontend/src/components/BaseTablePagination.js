@@ -44,7 +44,7 @@ export function ActionButtonsPagination({ value }) {
   )
 }
 
-export function BaseTablePagination({ columns, data, currentPage, totalPages, pageSize, onPageChange, onPageSizeChange, loading, showView = true, judul, showVisualisasiButton = false }) {
+export function BaseTablePagination({ columns, data, currentPage, totalPages, pageSize, onPageChange, onPageSizeChange, loading, showView = true, showEdit = false, onEdit, judul, showVisualisasiButton = false }) {
   const navigate = useNavigate()
   const [selectedShipments, setSelectedShipments] = useState([])
   const [allChecked, setAllChecked] = useState(false)
@@ -121,12 +121,21 @@ export function BaseTablePagination({ columns, data, currentPage, totalPages, pa
                                     {/* Tombol Detail, dikontrol HANYA oleh `showView` */}
                                     {showView && (
                                         <button
-                                            className="flex items-center px-2 py-1 bg-gray-500 text-white rounded-md text-xs hover:bg-gray-600 transition-colors"
+                                            className="flex items-center px-2 py-1 bg-gray-500 text-white rounded-md text-xs hover:bg-gray-600 transition-colors mr-2"
                                             onClick={() => onViewDetail(row.id)}
                                             title="View Detail"
                                         >
                                             Detail
                                         </button>
+                                    )}
+
+                                    {/* Tombol Edit */}
+                                    {showEdit && (
+                                        <BsPencilSquare 
+                                          className="cursor-pointer text-gray-500 hover:text-blue-500" 
+                                          title="Edit" 
+                                          onClick={() => onEdit(row.id)} 
+                                        />
                                     )}
                                   </div>
 

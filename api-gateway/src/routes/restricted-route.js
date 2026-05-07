@@ -10,11 +10,16 @@ import {
   getAllLocationsAdminController,
   getAllLocationsController,
   getLocationByIdController,
+  createLocationController,
+  updateLocationController,
 } from "../controllers/location-controller.js"; //LOCATION
 import {
   getAllTruckAdminController,
   getAllTrucksController,
   getTruckByIDController,
+  createTruckController,
+  updateTruckController,
+  getAllTruckTypesController,
 } from "../controllers/truck-controller.js"; //TRUCK
 import { getAllRoleController } from "../controllers/role-controller.js"; //ROLE
 import { getAllDCController } from "../controllers/dc-controller.js"; //DC
@@ -382,6 +387,38 @@ restrictedRouter.get("/api/v1/locations", getAllLocationsController);
  */
 restrictedRouter.get("/api/v1/location/:lokasiId", getLocationByIdController);
 
+/**
+ * @swagger
+ * /api/v1/location:
+ *   post:
+ *     summary: Add a new location (Admin)
+ *     tags: [Location]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       201:
+ *         description: Location created successfully
+ *       401:
+ *         description: Unauthorized
+ */
+restrictedRouter.post("/api/v1/location", createLocationController);
+
+/**
+ * @swagger
+ * /api/v1/location:
+ *   put:
+ *     summary: Update an existing location (Admin)
+ *     tags: [Location]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Location updated successfully
+ *       401:
+ *         description: Unauthorized
+ */
+restrictedRouter.put("/api/v1/location", updateLocationController);
+
 //trucks
 /**
  * @swagger
@@ -436,6 +473,52 @@ restrictedRouter.get("/api/v1/trucks", getAllTrucksController);
  *         description: Truck not found
  */
 restrictedRouter.get("/api/v1/truck/:truckId", getTruckByIDController);
+
+/**
+ * @swagger
+ * /api/v1/truck-types:
+ *   get:
+ *     summary: Get all truck types
+ *     tags: [Truck]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of truck types
+ */
+restrictedRouter.get("/api/v1/truck-types", getAllTruckTypesController);
+
+/**
+ * @swagger
+ * /api/v1/truck:
+ *   post:
+ *     summary: Add a new truck (Admin)
+ *     tags: [Truck]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       201:
+ *         description: Truck created successfully
+ */
+restrictedRouter.post("/api/v1/truck", createTruckController);
+
+/**
+ * @swagger
+ * /api/v1/truck:
+ *   put:
+ *     summary: Update an existing truck
+ *     tags: [Truck]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Truck updated successfully
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Truck not found
+ */
+restrictedRouter.put("/api/v1/truck", updateTruckController);
 
 //roles
 /**
