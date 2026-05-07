@@ -76,8 +76,7 @@ services:
       - "8001:8000"
     networks:
       tms_net: {}
-      nginx-manager_customnetwork:
-        ipv4_address: 172.20.0.180
+      nginx-manager_customnetwork: {}
     security_opt:
       - seccomp=unconfined
 
@@ -113,8 +112,7 @@ services:
     command: sh -c "npx prisma migrate deploy && node index.js"
     networks:
       tms_net: {}
-      nginx-manager_customnetwork:
-        ipv4_address: 172.20.0.161
+      nginx-manager_customnetwork: {}
 
   
 
@@ -138,8 +136,7 @@ services:
     restart: always
     networks:
       tms_net: {}
-      nginx-manager_customnetwork:
-        ipv4_address: 172.20.0.162
+      nginx-manager_customnetwork: {}
 
   
 
@@ -198,8 +195,7 @@ services:
     restart: always
     networks:
       tms_net: {}
-      nginx-manager_customnetwork:
-        ipv4_address: 172.20.0.163
+      nginx-manager_customnetwork: {}
 
   ml_service:
     ulimits:
