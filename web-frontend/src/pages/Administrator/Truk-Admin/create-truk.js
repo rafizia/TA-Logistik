@@ -90,7 +90,9 @@ function CreateTrukAdmin() {
         if (foundType) {
           setTipeDropdown(foundType)
           updatedData.type_id = foundType.value
-          updatedData.max_individual_capacity_volume = foundType.volume > 0 ? foundType.volume : ''
+          if (stateData.max_individual_capacity_volume) {
+            updatedData.max_individual_capacity_volume = stateData.max_individual_capacity_volume
+          }
         }
       }
 

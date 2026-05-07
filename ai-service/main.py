@@ -88,9 +88,9 @@ def manage_truck(query: str) -> str:
     Input must be a JSON string with:
     - action: 'CREATE', 'UPDATE', or 'DELETE'
     - data: dictionary of truck fields.
-    For CREATE: requires plate_number, type_id, dc_id, first_status, created_by.
+    For CREATE: requires plate_number, type_id, dc_id, first_status, created_by. Optional: max_individual_capacity_volume.
     For UPDATE/DELETE: requires plate_number or id.
-    Example: {"action": "CREATE", "data": {"plate_number": "B 1234 XY", "type_id": 1, "dc_id": 1, "first_status": "AVAILABLE", "created_by": "AI_Agent"}}
+    Example: {"action": "CREATE", "data": {"plate_number": "B 1234 XY", "type_id": 1, "dc_id": 1, "first_status": "AVAILABLE", "created_by": "AI_Agent", "max_individual_capacity_volume": 150000}}
     """
     try:
         payload = json.loads(query)
