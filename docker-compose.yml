@@ -20,8 +20,6 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=paragon
-    ports:
-      - "5433:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
@@ -51,6 +49,9 @@ services:
       timeout: 5s
       retries: 5
     restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672"
     networks:
       - tms_net
     security_opt:
@@ -71,6 +72,8 @@ services:
     environment:
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
     restart: always
+    ports:
+      - "8001:8000"
     networks:
       tms_net: {}
       nginx-manager_customnetwork:
@@ -231,9 +234,10 @@ services:
     build: ./ai-service
     container_name: ai_agent_service
     ports:
-      - "8000:8000"
+      - "8006:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@api_gateway_db:5432/paragon
+      - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/paragon
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
     networks:
       - tms_net
     extra_hosts:
