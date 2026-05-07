@@ -15,7 +15,7 @@ services:
       stack: 8388608    
       nproc: 40960
     image: postgres:16
-    container_name: api_gateway_db
+    container_name: e2e_logistics_db
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
@@ -39,7 +39,7 @@ services:
       stack: 8388608    
       nproc: 40960
     image: rabbitmq:3.13-management
-    container_name: api_gateway_rabbitmq
+    container_name: e2e_logistics_rabbitmq
     environment:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASS}
@@ -68,7 +68,7 @@ services:
       dockerfile: Dockerfile
     pull_policy: build
     image: custom-opt-algorithm:local
-    container_name: opt-algorithm
+    container_name: e2e_logistics_opt_algorithm
     environment:
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
     restart: always
@@ -92,7 +92,7 @@ services:
     image: custom-api-gateway:local
     ports:
       - "28080:8080"
-    container_name: api_gateway
+    container_name: e2e_logistics_api_gateway
     depends_on:
       db:
         condition: service_healthy
@@ -130,7 +130,7 @@ services:
     ports:
       - "18081:8081"
     image: custom-storage:local
-    container_name: storage_service
+    container_name: e2e_logistics_storage_service
     volumes:
       - storage_uploads:/app/uploads
     environment:
@@ -153,7 +153,7 @@ services:
       dockerfile: Dockerfile
     pull_policy: build
     image: custom-tmslastmile-worker:local
-    container_name: tmslastmile_worker
+    container_name: e2e_logistics_worker
     environment:
       - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/
       - EXCHANGE=box_exchange
@@ -189,7 +189,7 @@ services:
         REACT_APP_BACKEND_URL: ${REACT_APP_BACKEND_URL}
     pull_policy: build
     image: custom-web-frontend:local
-    container_name: web-frontend
+    container_name: e2e_logistics_frontend
     ports:
       - "13000:3000"
     environment:
@@ -210,7 +210,7 @@ services:
       dockerfile: Dockerfile.gpu
     pull_policy: build
     image: custom-ml-service:local
-    container_name: ml_service
+    container_name: e2e_logistics_ml_service
     profiles:
       - "ml"
     ports:
@@ -232,7 +232,7 @@ services:
 
   ai-service:
     build: ./ai-service
-    container_name: ai_agent_service
+    container_name: e2e_logistics_ai_service
     ports:
       - "8006:8000"
     environment:
