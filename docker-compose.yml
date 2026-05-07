@@ -230,17 +230,17 @@ services:
     security_opt:
       - seccomp=unconfined
 
-  ai-service:
-    build: ./ai-service
-    container_name: e2e_logistics_ai_service
-    ports:
-      - "8006:8000"
-    environment:
-      - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/paragon
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-    networks:
-      - tms_net
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    depends_on:
-      - db
+#  ai-service:
+#    build: ./ai-service
+#    container_name: e2e_logistics_ai_service
+#    ports:
+#      - "8006:8000"
+ #   environment:
+#      - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/paragon
+#      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+#    networks:
+#      - tms_net
+#    extra_hosts:
+#      - "host.docker.internal:host-gateway"
+#    depends_on:
+#      - db
