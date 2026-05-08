@@ -1,8 +1,8 @@
 networks:
   tms_net:
     name: tms_net
-  nginx-manager_customnetwork:
-    external: true
+#  nginx-manager_customnetwork:
+#    external: true
 
 volumes:
   db_data:
@@ -91,8 +91,8 @@ services:
       dockerfile: Dockerfile
     pull_policy: build
     image: custom-api-gateway:local
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     container_name: e2e_logistics_api_gateway
     depends_on:
       db:
@@ -189,8 +189,8 @@ services:
     pull_policy: build
     image: custom-web-frontend:local
     container_name: e2e_logistics_frontend
-    ports:
-      - "13000:3000"
+    expose:
+      - "3000"
     environment:
       - REACT_APP_GOOGLE_MAPS_KEY=${REACT_APP_GOOGLE_MAPS_KEY}
       - REACT_APP_BACKEND_URL=${REACT_APP_BACKEND_URL}
@@ -242,3 +242,17 @@ services:
 #      - "host.docker.internal:host-gateway"
 #    depends_on:
 #      - db
+
+  # Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: e2e_logistics_nginx
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - web_frontend
+      - api_gateway
+    networks:
+      - tms_net
