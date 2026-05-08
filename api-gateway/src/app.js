@@ -11,7 +11,7 @@ export const app = express();
 
 app.use(
   cors({
-    origin: "http://152.118.31.57:13000",
+    origin: (origin, callback) => callback(null, true),
     credentials: true,
   })
 );
