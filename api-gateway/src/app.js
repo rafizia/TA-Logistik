@@ -11,10 +11,12 @@ export const app = express();
 
 app.use(
   cors({
-    origin: (origin, callback) => callback(null, true),
+    origin: "http://152.118.31.57:13000",
     credentials: true,
   })
 );
+
+app.options("*", cors());
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
