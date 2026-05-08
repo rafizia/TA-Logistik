@@ -163,7 +163,7 @@ llm = ChatGroq(
     stop=None
 )'''
 
-llm = ChatOllama(model="qwen3.5:9b", base_url="http://152.118.31.57:11434")
+llm = ChatOllama(model="qwen3.5:9b", base_url="http://host.docker.internal:11434")
 #llm = ChatOllama(model="llama3.1", num_ctx=2048, base_url="http://host.docker.internal:11434")
 tools = [system_control, get_available_options, manage_truck]
 

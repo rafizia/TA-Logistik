@@ -226,6 +226,8 @@ services:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
     networks:
       - tms_net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - db
 
