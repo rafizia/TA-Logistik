@@ -46,7 +46,7 @@ export default function AIChatbox({ onClose }) {
     try {
       const aiBaseUrl = process.env.REACT_APP_BACKEND_URL.includes('localhost') 
         ? 'http://localhost:8000' 
-        : process.env.REACT_APP_BACKEND_URL.replace('/api', '/ai');
+        : process.env.REACT_APP_BACKEND_URL.replace(/\/$/, "") + '/ai';
 
       const response = await fetch(`${aiBaseUrl}/chat`, {
         method: 'POST',
