@@ -3,9 +3,9 @@ FROM python:3.11-slim-bookworm
 WORKDIR /app
 
 # Install dependencies sistem untuk psycopg2
-RUN apt-get update -o APT::Update::Post-Invoke-Success="true" && \
+RUN rm -f /etc/apt/apt.conf.d/docker-clean && \
+    apt-get update && \
     apt-get install -y --no-install-recommends libpq-dev gcc && \
-    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
