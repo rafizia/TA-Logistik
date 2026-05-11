@@ -11,9 +11,7 @@ from langchain_community.agent_toolkits import create_sql_agent
 from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_core.prompts import PromptTemplate
 from langchain.tools import tool
-from langchain_google_genai import ChatGoogleGenerativeAI
 from sqlalchemy import text
-from langchain_groq import ChatGroq
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
@@ -55,17 +53,20 @@ def system_control(query: str) -> str:
 @tool
 def get_available_options(query: str = "") -> str:
     """
-    Fetches available dropdown options for trucks:
+    Fetches available dropdown options for trucks and locations:
     - Vehicle Types (name and id)
     - Distribution Centers (name and id)
+    - Customers (name and id)
     - Valid Statuses (TruckFirstStatus and TruckSecondStatus)
-    Use this before creating or updating a truck to ensure you have the correct IDs and enum values.
+    Use this before creating or updating a truck or location to ensure you have the correct IDs and enum values.
     """
     try:
         # Get Vehicle Types
         types = db.run("SELECT id, name FROM truck_type")
         # Get DCs
         dcs = db.run("SELECT id, name FROM dc")
+        # Get Customers
+        customers = db.run("SELECT id, name FROM customer")
         
         # Static Statuses (extracted from DB earlier)
         first_statuses = ["AVAILABLE", "UNAVAILABLE"]
@@ -74,6 +75,7 @@ def get_available_options(query: str = "") -> str:
         result = {
             "vehicle_types": types,
             "distribution_centers": dcs,
+            "customers": customers,
             "first_statuses": first_statuses,
             "second_statuses": second_statuses
         }
@@ -144,29 +146,60 @@ def manage_truck(query: str) -> str:
     except Exception as e:
         return f"ERROR: {str(e)}"
 
-'''
-llm = ChatGoogleGenerativeAI(
-    model="gemini-3-flash-preview",
-    temperature=0,
-    max_tokens=None,
-    timeout=None,
-    max_retries=2,
-)
+@tool
+def manage_location(query: str) -> str:
+    """
+    Use this tool for CREATE, UPDATE, or DELETE operations on location entities.
+    Input must be a JSON string with:
+    - action: 'CREATE', 'UPDATE', or 'DELETE'
+    - data: dictionary of location fields.
+    For CREATE: requires address, provinsi, kabupaten_kota, kecamatan, desa_kelurahan, kode_pos, open_hour, close_hour, customer_id, dc_id.
+    Note: Always use `get_available_options` first to find the correct `customer_id` and `dc_id` from names like "PT ABC" or "DC Jakarta".
+    For UPDATE/DELETE: requires id.
+    Example: {"action": "CREATE", "data": {"address": "Jl. Merdeka 1", "provinsi": "DKI Jakarta", "kabupaten_kota": "Jakarta Pusat", "kecamatan": "Gambir", "desa_kelurahan": "Gambir", "kode_pos": "10110", "open_hour": "08:00", "close_hour": "17:00", "customer_id": 1, "dc_id": 1}}
+    """
+    try:
+        payload = json.loads(query)
+        action = payload.get("action").upper()
+        data = payload.get("data", {})
+        
+        if action == "CREATE":
+            # Basic validation
+            required = ["address", "provinsi", "kabupaten_kota", "kecamatan", "desa_kelurahan", "kode_pos", "open_hour", "close_hour", "customer_id", "dc_id"]
+            for field in required:
+                if field not in data:
+                    return f"ERROR: Missing required field '{field}' for CREATE."
+            
+            return f"SUCCESS:PREFILL:add_location:{json.dumps(data)}"
+            
+        elif action == "UPDATE":
+            location_id = data.get("id")
+            if not location_id:
+                return "ERROR: Missing id for UPDATE."
+            
+            prefill_data = {
+                "Id": location_id,
+                "prefill": data
+            }
+            return f"SUCCESS:PREFILL:edit_location:{json.dumps(prefill_data)}"
+            
+        elif action == "DELETE":
+            identifier = data.get("id")
+            if not identifier:
+                return "ERROR: Missing id for DELETE."
+            
+            sql = text(f"DELETE FROM location WHERE id = :ident")
+            db._engine.connect().execute(sql, {"ident": identifier})
+            return f"SUCCESS: Location {identifier} deleted successfully."
+            
+        return "ERROR: Invalid action."
+    except Exception as e:
+        return f"ERROR: {str(e)}"
 
-llm = ChatGroq(
-    model="qwen/qwen3-32b",
-    temperature=0.6,
-    max_completion_tokens=4096,
-    top_p=0.95,
-    reasoning_effort="default",
-    stream=True,
-    stop=None
-)'''
-
-llm = ChatOllama(model="qwen3.5:9b", base_url="http://host.docker.internal:11434")
+# llm = ChatOllama(model="qwen3.5:9b", base_url="http://host.docker.internal:11434")
 #llm = ChatOllama(model="llama3.1", num_ctx=2048, base_url="http://host.docker.internal:11434")
-#llm = ChatOllama(model="qwen3.5:9b", base_url="http://152.118.31.57:11434")
-tools = [system_control, get_available_options, manage_truck]
+llm = ChatOllama(model="qwen3.5:9b", base_url="http://152.118.31.57:11434")
+tools = [system_control, get_available_options, manage_truck, manage_location]
 
 toolkit = SQLDatabaseToolkit(db=db, llm=llm)
 
@@ -241,6 +274,11 @@ DATA OPERATIONS (CRUD):
 - Always use `get_available_options` first if the user provides names (like "Blind Van" or "DC Jakarta") instead of IDs, to find the correct `type_id`, `dc_id`, or status enum values.
 - CREATE conditions: Must have a license plate, type_id, dc_id, first_status, and created_by.
 - DELETE/UPDATE conditions: Must have a truck ID or plate_number.
+
+2. 'manage_location' -> Used to create, modify, or delete locations.
+- Always use `get_available_options` first if the user provides names (like "PT ABC" or "DC Jakarta") instead of IDs, to find the correct `customer_id` and `dc_id`.
+- CREATE conditions: Must have address, provinsi, kabupaten_kota, kecamatan, desa_kelurahan, kode_pos, open_hour, close_hour, customer_id, dc_id.
+- DELETE/UPDATE conditions: Must have a location ID.
 
 EXECUTION RULES:
 - If the user wants to "view," "open," or "show," use action_type='NAVIGATE' with `system_control`.

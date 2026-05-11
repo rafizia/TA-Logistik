@@ -13,7 +13,7 @@ function UpdateLokasiAdmin() {
   const { state } = useLocation()
   const idLokasi = state?.Id
 
-  const [dataPerusahaan, setDataPerusahaan] = useState([])
+  const [dataCustomer, setDataCustomer] = useState([])
   const [dataDC, setDataDC] = useState([])
   const [showLoading, setShowLoading] = useState(true)
 
@@ -25,7 +25,7 @@ function UpdateLokasiAdmin() {
   const [isOpenSuccess, setIsOpenSuccess] = useState(false)
   const [isError, setIsError] = useState(false)
   
-  const [perusahaanDropdown, setPerusahaanDropdown] = useState(null)
+  const [customerDropdown, setCustomerDropdown] = useState(null)
   const [dcDropdown, setDCDropdown] = useState(null)
 
   const [updateLokasiData, setUpdateLokasiData] = useState({
@@ -54,15 +54,15 @@ function UpdateLokasiAdmin() {
     const fetchData = async () => {
       try {
         let custData = []
-        if (dataPerusahaan.length === 0) {
+        if (dataCustomer.length === 0) {
           const custRes = await axiosAuthInstance.get('/customers?limit=1000')
           custData = custRes.data.data.customers.map((item) => ({
             value: item.id,
             name: item.name
           }))
-          setDataPerusahaan(custData)
+          setDataCustomer(custData)
         } else {
-          custData = dataPerusahaan
+          custData = dataCustomer
         }
 
         let tempDcData = []
@@ -103,7 +103,7 @@ function UpdateLokasiAdmin() {
         })
 
         if (loc.customer) {
-          setPerusahaanDropdown({ name: loc.customer.name, value: loc.customer.id })
+          setCustomerDropdown({ name: loc.customer.name, value: loc.customer.id })
         }
         if (loc.dc) {
           setDCDropdown({ name: loc.dc.name, value: loc.dc.id })
@@ -224,9 +224,9 @@ function UpdateLokasiAdmin() {
               <TextField label="Kode Pos" placeholder="12345" required={true} className="w-full" value={updateLokasiData.kode_pos || ""} onChange={(e) => handleInputChange('kode_pos', e.target.value)} isError={isError && checkAttributeNull(updateLokasiData.kode_pos)} />
             </div>
 
-            {/* Asal perusahaan didisable sehingga tidak bisa diubah */}
+            {/* Asal customer didisable sehingga tidak bisa diubah */}
             <div className="pointer-events-none opacity-60 w-full">
-              <Dropdown placeholder="Pilih Perusahaan" label="Perusahaan " data={dataPerusahaan} className="w-full" required={true} value={perusahaanDropdown} onChange={() => {}} disabled={true} />
+              <Dropdown placeholder="Pilih Customer" label="Customer " data={dataCustomer} className="w-full" required={true} value={customerDropdown} onChange={() => {}} disabled={true} />
             </div>
 
             <div className="flex gap-4">
