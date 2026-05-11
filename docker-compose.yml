@@ -217,6 +217,9 @@ services:
       - seccomp=unconfined
 
   ai-service:
+    ulimits:
+      stack: 8388608   
+      nproc: 40960
     build: ./ai-service
     container_name: e2e_logistics_ai_service
     expose:
