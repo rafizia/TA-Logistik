@@ -33,7 +33,8 @@ pg_uri = os.getenv("DATABASE_URL", default_db_url)
 if pg_uri.startswith("postgresql://"):
     pg_uri = pg_uri.replace("postgresql://", "postgresql+psycopg2://", 1)
 
-db = SQLDatabase.from_uri(pg_uri)
+#db = SQLDatabase.from_uri(pg_uri)
+db = SQLDatabase.from_uri(pg_uri, engine_args={"pool_size": 5, "max_overflow": 0})
 
 @tool
 def system_control(query: str) -> str:
@@ -300,10 +301,10 @@ PROMPT = PromptTemplate(
 agent_executor = create_sql_agent(
     llm=llm,
     toolkit=toolkit,
-    verbose=True,
+    verbose=False,
     prompt=PROMPT,
     extra_tools=tools,
-    agent_executor_kwargs={"return_intermediate_steps": True, "handle_parsing_errors": True}
+    agent_executor_kwargs={"return_intermediate_steps": False, "handle_parsing_errors": True}
 )
 
 class ChatRequest(BaseModel):
