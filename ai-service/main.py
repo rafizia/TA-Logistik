@@ -196,9 +196,9 @@ def manage_location(query: str) -> str:
     except Exception as e:
         return f"ERROR: {str(e)}"
 
-# llm = ChatOllama(model="qwen3.5:9b", base_url="http://host.docker.internal:11434")
+llm = ChatOllama(model="qwen3.5:9b", base_url="http://e2e_logistics_ollama:11434")
 #llm = ChatOllama(model="llama3.1", num_ctx=2048, base_url="http://host.docker.internal:11434")
-llm = ChatOllama(model="qwen3.5:9b", base_url="http://152.118.31.57:11434")
+# llm = ChatOllama(model="qwen3.5:9b", base_url="http://152.118.31.57:11434")
 tools = [system_control, get_available_options, manage_truck, manage_location]
 
 toolkit = SQLDatabaseToolkit(db=db, llm=llm)
