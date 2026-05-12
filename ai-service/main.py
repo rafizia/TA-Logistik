@@ -330,8 +330,8 @@ agent_executor = create_sql_agent(
     verbose=False,
     prompt=PROMPT,
     extra_tools=tools,
-    max_iterations=10,
-    max_execution_time=60,
+    #max_iterations=10,
+    #max_execution_time=60,
     agent_executor_kwargs={
         "return_intermediate_steps": True, 
         "handle_parsing_errors": True,
