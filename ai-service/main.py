@@ -33,8 +33,7 @@ pg_uri = os.getenv("DATABASE_URL", default_db_url)
 if pg_uri.startswith("postgresql://"):
     pg_uri = pg_uri.replace("postgresql://", "postgresql+psycopg2://", 1)
 
-#db = SQLDatabase.from_uri(pg_uri)
-db = SQLDatabase.from_uri(pg_uri, engine_args={"pool_size": 5, "max_overflow": 0})
+db = SQLDatabase.from_uri(pg_uri)
 
 @tool
 def system_control(query: str) -> str:
@@ -118,10 +117,11 @@ def manage_truck(query: str) -> str:
             truck_id = data.get("id")
             if not truck_id:
                 sql = text("SELECT id FROM truck WHERE plate_number = :plate")
-                result = db._engine.connect().execute(sql, {"plate": identifier}).fetchone()
-                if not result:
-                    return f"ERROR: Truck with plate {identifier} not found."
-                truck_id = result[0]
+                with db._engine.connect() as conn:
+                    result = conn.execute(sql, {"plate": identifier}).fetchone()
+                    if not result:
+                        return f"ERROR: Truck with plate {identifier} not found."
+                    truck_id = result[0]
             
             # Prepare data for pre-fill
             prefill_data = {
@@ -140,7 +140,9 @@ def manage_truck(query: str) -> str:
             
             where_clause = "plate_number = :ident" if data.get("plate_number") else "id = :ident"
             sql = text(f"DELETE FROM truck WHERE {where_clause}")
-            db._engine.connect().execute(sql, {"ident": identifier})
+            with db._engine.connect() as conn:
+                conn.execute(sql, {"ident": identifier})
+                conn.commit()
             return f"SUCCESS: Truck {identifier} deleted successfully."
             
         return "ERROR: Invalid action."
@@ -190,7 +192,9 @@ def manage_location(query: str) -> str:
                 return "ERROR: Missing id for DELETE."
             
             sql = text(f"DELETE FROM location WHERE id = :ident")
-            db._engine.connect().execute(sql, {"ident": identifier})
+            with db._engine.connect() as conn:
+                conn.execute(sql, {"ident": identifier})
+                conn.commit()
             return f"SUCCESS: Location {identifier} deleted successfully."
             
         return "ERROR: Invalid action."
@@ -304,7 +308,12 @@ agent_executor = create_sql_agent(
     verbose=False,
     prompt=PROMPT,
     extra_tools=tools,
-    agent_executor_kwargs={"return_intermediate_steps": False, "handle_parsing_errors": True}
+    max_iterations=10,
+    max_execution_time=60,
+    agent_executor_kwargs={
+        "return_intermediate_steps": True, 
+        "handle_parsing_errors": True,
+    }
 )
 
 class ChatRequest(BaseModel):
@@ -312,7 +321,7 @@ class ChatRequest(BaseModel):
     history: list = []
 
 @app.post("/chat")
-async def chat_with_ai(request: ChatRequest):
+def chat_with_ai(request: ChatRequest):
     try:
         # Format history for the prompt
         history_text = ""
