@@ -222,8 +222,8 @@ services:
       stack: 8388608   
       nproc: 40960
     pids_limit: 1000
-    #security_opt:
-    #  - seccomp=unconfined
+    security_opt:
+      - seccomp=unconfined
     build: ./ai-service
     container_name: e2e_logistics_ai_service
     expose:
