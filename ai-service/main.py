@@ -1,25 +1,8 @@
 import os
-import threading
-
-threading.stack_size(524288)
-
-try:
-    def test_func(): pass
-    t = threading.Thread(target=test_func)
-    t.start()
-    t.join()
-    print("--- THREAD TEST SUCCESSFUL ---")
-except Exception as e:
-    print(f"--- THREAD TEST FAILED: {str(e)} ---")
-
-os.environ["LANGCHAIN_TRACING_V2"] = "false"
-os.environ["LANGCHAIN_CALLBACKS_BACKGROUND"] = "false"
 import json
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from anyio.lowlevel import RunVar
-from anyio import CapacityLimiter
 from langchain_ollama import ChatOllama
 from pydantic import BaseModel
 from langchain_community.utilities.sql_database import SQLDatabase

@@ -221,7 +221,6 @@ services:
     ulimits:
       stack: 8388608   
       nproc: 40960
-    pids_limit: 1000
     security_opt:
       - seccomp=unconfined
     build: ./ai-service
@@ -235,9 +234,6 @@ services:
       - tms_net
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    #dns:
-     # - 8.8.8.8
-    #  - 8.8.4.4
     depends_on:
       - db
 
