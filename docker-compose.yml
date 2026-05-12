@@ -235,6 +235,9 @@ services:
       - tms_net
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    #dns:
+     # - 8.8.8.8
+    #  - 8.8.4.4
     depends_on:
       - db
 
