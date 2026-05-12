@@ -3,6 +3,8 @@ import json
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from anyio.lowlevel import RunVar
+from anyio import CapacityLimiter
 from langchain_ollama import ChatOllama
 from pydantic import BaseModel
 from langchain_community.utilities.sql_database import SQLDatabase
@@ -16,6 +18,11 @@ from sqlalchemy import text
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 app = FastAPI()
+
+@app.on_event("startup")
+async def startup():
+    RunVar("_default_thread_limiter").set(CapacityLimiter(10))
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
