@@ -1,4 +1,19 @@
 import os
+import threading
+
+threading.stack_size(524288)
+
+try:
+    def test_func(): pass
+    t = threading.Thread(target=test_func)
+    t.start()
+    t.join()
+    print("--- THREAD TEST SUCCESSFUL ---")
+except Exception as e:
+    print(f"--- THREAD TEST FAILED: {str(e)} ---")
+
+os.environ["LANGCHAIN_TRACING_V2"] = "false"
+os.environ["LANGCHAIN_CALLBACKS_BACKGROUND"] = "false"
 import json
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -21,7 +36,7 @@ app = FastAPI()
 
 @app.on_event("startup")
 async def startup():
-    RunVar("_default_thread_limiter").set(CapacityLimiter(10))
+    print("AI Service is starting up...")
 
 app.add_middleware(
     CORSMiddleware,
@@ -328,7 +343,7 @@ class ChatRequest(BaseModel):
     history: list = []
 
 @app.post("/chat")
-def chat_with_ai(request: ChatRequest):
+async def chat_with_ai(request: ChatRequest):
     try:
         # Format history for the prompt
         history_text = ""
@@ -336,7 +351,7 @@ def chat_with_ai(request: ChatRequest):
             sender = "User" if msg.get("sender") == "user" else "AI"
             history_text += f"{sender}: {msg.get('text')}\n"
             
-        response = agent_executor.invoke({
+        response = await agent_executor.ainvoke({
             "input": request.query,
             "history": history_text
         })
