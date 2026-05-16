@@ -206,9 +206,9 @@ def manage_location(query: str) -> str:
     except Exception as e:
         return f"ERROR: {str(e)}"
 
-llm = ChatOllama(model="qwen3.5:9b", base_url="http://host.docker.internal:11434")
+#llm = ChatOllama(model="qwen3.5:9b", base_url="http://host.docker.internal:11434")
 #llm = ChatOllama(model="llama3.1", num_ctx=2048, base_url="http://host.docker.internal:11434")
-# llm = ChatOllama(model="qwen3.5:9b", base_url="http://152.118.31.57:11434")
+llm = ChatOllama(model="qwen3.5:9b", base_url="http://152.118.31.57:11434")
 tools = [system_control, get_available_options, manage_truck, manage_location]
 
 toolkit = SQLDatabaseToolkit(db=db, llm=llm)
@@ -328,6 +328,7 @@ class ChatRequest(BaseModel):
 
 @app.post("/chat")
 async def chat_with_ai(request: ChatRequest):
+    print(f"\n--- [DEBUG] Incoming Request: {request.query} ---")
     try:
         # Format history for the prompt
         history_text = ""
@@ -335,13 +336,15 @@ async def chat_with_ai(request: ChatRequest):
             sender = "User" if msg.get("sender") == "user" else "AI"
             history_text += f"{sender}: {msg.get('text')}\n"
             
+        print("[DEBUG] Calling Agent Executor...")
         response = await agent_executor.ainvoke({
             "input": request.query,
             "history": history_text
         })
+        print("[DEBUG] Agent Executor finished successfully.")
 
         # debug
-        print("AI response:", response)
+        print("[DEBUG] Full Agent Response:", response)
         
         reply_text = response.get('output', '')
         command_payload = None
@@ -386,18 +389,22 @@ async def chat_with_ai(request: ChatRequest):
                         "data": payload_data
                     }
                 except Exception as e:
-                    print(f"Error parsing PREFILL observation: {e}")
+                    print(f"[DEBUG] Error parsing PREFILL observation: {e}")
                     command_payload = None
             
             if command_payload:
                 break
                 
         if not reply_text and command_payload:
-            reply_text = "Baik, saya akan mengarahkan Anda ke halaman truk."
+            reply_text = "Baik, saya akan mengarahkan Anda ke halaman yang relevan."
 
+        print(f"[DEBUG] Final Reply: {reply_text[:50]}...")
         return {
             "reply": reply_text,
             "command": command_payload
         }
     except Exception as e:
+        print(f"!!! [ERROR] Exception in chat_with_ai: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return {"error": str(e)}
