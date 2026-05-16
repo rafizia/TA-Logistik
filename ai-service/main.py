@@ -12,6 +12,7 @@ from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_core.prompts import PromptTemplate
 from langchain.tools import tool
 from sqlalchemy import text
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
@@ -206,9 +207,17 @@ def manage_location(query: str) -> str:
     except Exception as e:
         return f"ERROR: {str(e)}"
 
+llm = ChatGoogleGenerativeAI(
+    model="gemini-3-flash-preview",
+    temperature=0,
+    max_tokens=None,
+    timeout=None,
+    max_retries=2,
+)
+
 #llm = ChatOllama(model="qwen3.5:9b", base_url="http://host.docker.internal:11434")
 #llm = ChatOllama(model="llama3.1", num_ctx=2048, base_url="http://host.docker.internal:11434")
-llm = ChatOllama(model="qwen3.5:9b", base_url="http://152.118.31.57:11434")
+#llm = ChatOllama(model="qwen3.5:9b", base_url="http://152.118.31.57:11434")
 tools = [system_control, get_available_options, manage_truck, manage_location]
 
 toolkit = SQLDatabaseToolkit(db=db, llm=llm)
