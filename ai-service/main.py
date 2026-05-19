@@ -216,11 +216,12 @@ llm = ChatGoogleGenerativeAI(
     max_retries=2,
 )'''
 
-#llm = ChatOllama(model="llama3.2", base_url="http://host.docker.internal:11434")
-#llm = ChatOllama(model="llama3.1", num_ctx=2048, base_url="http://host.docker.internal:11434")
+_ollama_url = os.getenv("OLLAMA_BASE_URL", "http://e2e_logistics_ollama:11434")
+_ollama_model = os.getenv("OLLAMA_MODEL", "qwen3.5:9b")
+print(f"[DEBUG] LLM init: model={_ollama_model}, url={_ollama_url}")
 llm = ChatOllama(
-    model="qwen3.5:9b",
-    base_url="http://152.118.31.57:11434",
+    model=_ollama_model,
+    base_url=_ollama_url,
     think=False,
     num_predict=1024,
 )
@@ -351,15 +352,11 @@ async def chat_with_ai(request: ChatRequest):
             sender = "User" if msg.get("sender") == "user" else "AI"
             history_text += f"{sender}: {msg.get('text')}\n"
             
-        print("[DEBUG] Calling Agent Executor (sync in thread)...")
-        # Using asyncio.to_thread + sync invoke instead of ainvoke
-        # Reason: ainvoke uses HTTP streaming (astream) which hangs on this server's
-        # network. Sync invoke uses standard request-response which is confirmed working.
-        import asyncio as _asyncio
-        response = await _asyncio.to_thread(
-            agent_executor.invoke,
-            {"input": request.query, "history": history_text}
-        )
+        print("[DEBUG] Calling Agent Executor...")
+        response = await agent_executor.ainvoke({
+            "input": request.query,
+            "history": history_text
+        })
         print("[DEBUG] Agent Executor finished successfully.")
 
         # debug

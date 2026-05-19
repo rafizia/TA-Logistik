@@ -234,6 +234,8 @@ services:
       - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/paragon
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - PYTHONUNBUFFERED=1
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
+      - OLLAMA_MODEL=${OLLAMA_MODEL}
     networks:
       - tms_net
     extra_hosts:
