@@ -207,23 +207,11 @@ def manage_location(query: str) -> str:
     except Exception as e:
         return f"ERROR: {str(e)}"
 
-'''
-llm = ChatGoogleGenerativeAI(
-    model="gemini-3-flash-preview",
-    temperature=0,
-    max_tokens=None,
-    timeout=None,
-    max_retries=2,
-)'''
-
 _ollama_url = os.getenv("OLLAMA_BASE_URL", "http://e2e_logistics_ollama:11434")
 _ollama_model = os.getenv("OLLAMA_MODEL", "qwen3.5:9b")
-print(f"[DEBUG] LLM init: model={_ollama_model}, url={_ollama_url}")
 llm = ChatOllama(
     model=_ollama_model,
     base_url=_ollama_url,
-    think=False,
-    num_predict=1024,
 )
 tools = [system_control, get_available_options, manage_truck, manage_location]
 
@@ -344,7 +332,6 @@ class ChatRequest(BaseModel):
 
 @app.post("/chat")
 async def chat_with_ai(request: ChatRequest):
-    print(f"\n--- [DEBUG] Incoming Request: {request.query} ---")
     try:
         # Format history for the prompt
         history_text = ""
@@ -352,15 +339,10 @@ async def chat_with_ai(request: ChatRequest):
             sender = "User" if msg.get("sender") == "user" else "AI"
             history_text += f"{sender}: {msg.get('text')}\n"
             
-        print("[DEBUG] Calling Agent Executor...")
         response = await agent_executor.ainvoke({
             "input": request.query,
             "history": history_text
         })
-        print("[DEBUG] Agent Executor finished successfully.")
-
-        # debug
-        print("[DEBUG] Full Agent Response:", response)
         
         reply_text = response.get('output', '')
         command_payload = None
@@ -405,7 +387,7 @@ async def chat_with_ai(request: ChatRequest):
                         "data": payload_data
                     }
                 except Exception as e:
-                    print(f"[DEBUG] Error parsing PREFILL observation: {e}")
+                    print(f"Error parsing PREFILL observation: {e}")
                     command_payload = None
             
             if command_payload:
@@ -414,13 +396,12 @@ async def chat_with_ai(request: ChatRequest):
         if not reply_text and command_payload:
             reply_text = "Baik, saya akan mengarahkan Anda ke halaman yang relevan."
 
-        print(f"[DEBUG] Final Reply: {reply_text[:50]}...")
         return {
             "reply": reply_text,
             "command": command_payload
         }
     except Exception as e:
-        print(f"!!! [ERROR] Exception in chat_with_ai: {str(e)}")
+        print(f"[ERROR] chat_with_ai: {str(e)}")
         import traceback
         traceback.print_exc()
         return {"error": str(e)}
