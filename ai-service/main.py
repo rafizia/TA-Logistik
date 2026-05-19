@@ -21,13 +21,6 @@ app = FastAPI()
 @app.on_event("startup")
 async def startup():
     print("AI Service is starting up...")
-    print(f"[DEBUG] LLM: model={os.getenv('OLLAMA_MODEL', 'qwen3.5:9b')} url={os.getenv('OLLAMA_BASE_URL', 'http://152.118.31.57:11434')}")
-    # Quick connectivity test
-    try:
-        test = llm.invoke("Reply with only: OK")
-        print(f"[DEBUG] LLM connectivity OK: {getattr(test, 'content', str(test))[:80]}")
-    except Exception as e:
-        print(f"[ERROR] LLM connectivity FAILED: {e}")
 
 app.add_middleware(
     CORSMiddleware,
@@ -225,7 +218,12 @@ llm = ChatGoogleGenerativeAI(
 
 #llm = ChatOllama(model="llama3.2", base_url="http://host.docker.internal:11434")
 #llm = ChatOllama(model="llama3.1", num_ctx=2048, base_url="http://host.docker.internal:11434")
-llm = ChatOllama(model="qwen3.5:9b", base_url="http://152.118.31.57:11434")
+llm = ChatOllama(
+    model="qwen3.5:9b",
+    base_url="http://152.118.31.57:11434",
+    think=False,
+    num_predict=1024,
+)
 tools = [system_control, get_available_options, manage_truck, manage_location]
 
 toolkit = SQLDatabaseToolkit(db=db, llm=llm)
