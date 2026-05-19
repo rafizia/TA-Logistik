@@ -341,41 +341,6 @@ class ChatRequest(BaseModel):
     query: str
     history: list = []
 
-@app.get("/test-llm")
-async def test_llm():
-    """
-    Endpoint diagnosa: Test LLM dengan payload pendek dan panjang.
-    Akses via: curl http://server:8080/ai/test-llm
-    """
-    import asyncio
-    results = {}
-
-    # Test 1: Short prompt
-    try:
-        resp = await asyncio.to_thread(llm.invoke, "Reply with only the word: OK")
-        results["short_prompt"] = getattr(resp, "content", str(resp))[:200]
-    except Exception as e:
-        results["short_prompt"] = f"ERROR: {e}"
-
-    # Test 2: Long prompt (simulating agent prompt size ~2000 chars)
-    long_prompt = (
-        "You are a logistics AI assistant. "
-        "The following is a detailed question about the database schema. "
-        "Tables include: truck, truck_type, dc, customer, location, shipment, delivery_order. "
-        "Each table has various columns with foreign key relationships. "
-        "Given this schema, answer the following: How many trucks are in the system? "
-        "Think carefully step by step and provide a final answer. " * 20  # repeat to make it long
-    )
-    try:
-        resp = await asyncio.to_thread(llm.invoke, long_prompt)
-        results["long_prompt"] = getattr(resp, "content", str(resp))[:200]
-        results["long_prompt_len"] = len(long_prompt)
-    except Exception as e:
-        results["long_prompt"] = f"ERROR: {e}"
-
-    print(f"[TEST-LLM] Results: {results}")
-    return results
-
 @app.post("/chat")
 async def chat_with_ai(request: ChatRequest):
     print(f"\n--- [DEBUG] Incoming Request: {request.query} ---")
@@ -386,11 +351,15 @@ async def chat_with_ai(request: ChatRequest):
             sender = "User" if msg.get("sender") == "user" else "AI"
             history_text += f"{sender}: {msg.get('text')}\n"
             
-        print("[DEBUG] Calling Agent Executor...")
-        response = await agent_executor.ainvoke({
-            "input": request.query,
-            "history": history_text
-        })
+        print("[DEBUG] Calling Agent Executor (sync in thread)...")
+        # Using asyncio.to_thread + sync invoke instead of ainvoke
+        # Reason: ainvoke uses HTTP streaming (astream) which hangs on this server's
+        # network. Sync invoke uses standard request-response which is confirmed working.
+        import asyncio as _asyncio
+        response = await _asyncio.to_thread(
+            agent_executor.invoke,
+            {"input": request.query, "history": history_text}
+        )
         print("[DEBUG] Agent Executor finished successfully.")
 
         # debug
