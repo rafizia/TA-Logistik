@@ -1,4 +1,5 @@
 import os
+import re
 import json
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -12,7 +13,6 @@ from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_core.prompts import PromptTemplate
 from langchain.tools import tool
 from sqlalchemy import text
-from langchain_google_genai import ChatGoogleGenerativeAI
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
@@ -89,6 +89,19 @@ def get_available_options(query: str = "") -> str:
     except Exception as e:
         return f"Error fetching options: {str(e)}"
 
+PLATE_NUMBER_REGEX = re.compile(
+    r'^[A-Z]{1,2}\s[0-9]{1,4}\s[A-Z]{1,3}$',
+    re.IGNORECASE
+)
+
+def validate_plate_number(plate: str) -> tuple[bool, str]:
+    plate_stripped = plate.strip()
+    if not PLATE_NUMBER_REGEX.match(plate_stripped):
+        return False, (
+            f"Format nomor plat '{plate_stripped}' tidak valid. "
+        )
+    return True, ""
+
 @tool
 def manage_truck(query: str) -> str:
     """
@@ -97,6 +110,9 @@ def manage_truck(query: str) -> str:
     - action: 'CREATE', 'UPDATE', or 'DELETE'
     - data: dictionary of truck fields.
     For CREATE: requires plate_number, type_id, dc_id, first_status, created_by. Optional: max_individual_capacity_volume.
+      IMPORTANT: plate_number MUST follow Indonesian license plate format:
+      [1-2 letter area code] [1-4 digit registration number] [1-3 letter series code]
+      Each part separated by a SINGLE SPACE. Example: "B 1234 RFS", "AB 12 CD".
     For UPDATE/DELETE: requires plate_number or id.
     Example: {"action": "CREATE", "data": {"plate_number": "B 1234 XY", "type_id": 1, "dc_id": 1, "first_status": "AVAILABLE", "created_by": "AI_Agent", "max_individual_capacity_volume": 150000}}
     """
@@ -111,6 +127,13 @@ def manage_truck(query: str) -> str:
             for field in required:
                 if field not in data:
                     return f"ERROR: Missing required field '{field}' for CREATE."
+            
+            # Validasi format plat nomor
+            plate = data.get("plate_number", "")
+            is_valid, error_msg = validate_plate_number(plate)
+            if not is_valid:
+                return f"ERROR: {error_msg}"
+            data["plate_number"] = plate.strip().upper()
             
             return f"SUCCESS:PREFILL:add_truck:{json.dumps(data)}"
             
@@ -288,6 +311,18 @@ DATA OPERATIONS (CRUD):
 - Always use `get_available_options` first if the user provides names (like "Blind Van" or "DC Jakarta") instead of IDs, to find the correct `type_id`, `dc_id`, or status enum values.
 - CREATE conditions: Must have a license plate, type_id, dc_id, first_status, and created_by.
 - DELETE/UPDATE conditions: Must have a truck ID or plate_number.
+
+   LICENSE PLATE FORMAT (MANDATORY for CREATE):
+   Indonesian license plates MUST follow this exact format with a SINGLE SPACE between each part:
+     [Kode Wilayah] [Nomor Registrasi] [Kode Seri]
+   - Kode Wilayah  : 1 or 2 uppercase letters (area/region code), e.g. B, AB, D, F, L
+   - Nomor Registrasi : 1 to 4 digits (registration number), e.g. 1, 12, 123, 1234
+   - Kode Seri     : 1 to 3 uppercase letters (sub-region/series), e.g. A, RFS, XY
+   Valid examples  : "B 1234 RFS", "AB 12 CD", "D 5678 AB", "L 999 ZZ"
+   Invalid examples: "B1234RFS" (no spaces), "B-1234-RFS" (wrong separator),
+                     "B 12345 RFS" (5 digits), "B 1234 RFSA" (4 letters in seri)
+   If the user provides a plate number that does NOT match this format,
+   you MUST ask them to correct it before proceeding. DO NOT call manage_truck with an invalid plate.
 
 2. 'manage_location' -> Used to create, modify, or delete locations.
 - Always use `get_available_options` first if the user provides names (like "PT ABC" or "DC Jakarta") instead of IDs, to find the correct `customer_id` and `dc_id`.
