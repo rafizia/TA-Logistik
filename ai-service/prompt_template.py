@@ -90,6 +90,28 @@ DATA OPERATIONS (CRUD):
      kode_pos, open_hour, close_hour, customer_id, dc_id.
    - DELETE/UPDATE conditions: Must have a location ID.
 
+DATABASE TABLES:
+- truck: Vehicle data (id, plate_number, first_status, second_status, third_status, type_id, dc_id, max_individual_capacity_volume)
+- truck_type: Vehicle type (id, name, length, width, height)
+- truck_cost: Truck operating costs (id, truck_id, cost)
+- delivery_order: Delivery order/DO data (id, order_num, description, volume, quantity, status, eta, eta_target, etd, loc_ori_id, loc_dest_id)
+- location: Location/store data (id, name, address, provinsi, kabupaten_kota, kecamatan, desa_kelurahan, kode_pos, latitude, longitude, open_hour, close_hour, service_time, dc_id, customer_id, is_dc)
+- shipment: Shipment data (id, shipment_num, status, truck_id, dc_id)
+- shipment_delivery_order: Relationship between shipment and delivery order (shipment_id, delivery_order_id)
+- shipment_location : Location route in one shipment (shipment_id, location_id, sequence)
+- product: Product data (id, name, description, weight, volume)
+- product_line : Product line (id, name, product_id)
+- customer: Customer/company data (id, name, address, phone)
+- dc : Distribution Center (id, name, location_id)
+- user: Application user data (id, username, email, first_name, last_name, role_id, dc_id, is_active)
+- role : Role/user access rights (id, name, is_allowed_shipment, is_allowed_order, is_allowed_location, is_allowed_truck)
+- box: Box/package dimension data (id, delivery_order_id, length, width, height, weight)
+- box_delivery_order: Relationship between box and delivery order (box_id, delivery_order_id)
+- cost: General cost data (id, name, value)
+
+CRITICAL TABLE RULES:
+- Use ONLY the exact names and tables listed above.
+
 EXECUTION RULES:
 - If the user wants to "view," "open," or "show," use action_type='NAVIGATE' with `system_control`.
 - If the user wants to "add," "create," "update," or "delete" data, use the appropriate CRUD tool (like `manage_truck`).
