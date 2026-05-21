@@ -199,4 +199,26 @@ def use_tools(db):
         except Exception as e:
             return f"ERROR: {str(e)}"
 
-    return [system_control, get_available_options, manage_truck, manage_location]
+    @tool
+    def automate_shipment(query: str) -> str:
+        """
+        Use this tool to automatically create a shipment with optimization based on user request.
+        Input must be a JSON string with:
+        - start_date: 'YYYY-MM-DD'
+        - end_date: 'YYYY-MM-DD'
+        - optimization_type: 'distance' (for route optimization), 'emission' (for emissions), 'load' (for load optimization), or 'balance' (for distance and volume)
+        Example: {"start_date": "2025-01-01", "end_date": "2025-02-28", "optimization_type": "distance"}
+        """
+        try:
+            payload = json.loads(query)
+            required = ["start_date", "end_date", "optimization_type"]
+            for field in required:
+                if field not in payload:
+                    return f"ERROR: Missing required field '{field}' for automate_shipment."
+            
+            payload["auto_submit"] = True
+            return f"SUCCESS:PREFILL:automate_shipment:{json.dumps(payload)}"
+        except Exception as e:
+            return f"ERROR: {str(e)}"
+
+    return [system_control, get_available_options, manage_truck, manage_location, automate_shipment]

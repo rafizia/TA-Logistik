@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import jwtDecode from 'jwt-decode';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import axiosAuthInstance from '../utils/axios-auth-instance';
 
 export default function AIChatbox({ onClose }) {
   const [messages, setMessages] = useState([
@@ -68,6 +69,91 @@ export default function AIChatbox({ onClose }) {
       
       if (data.command) {
         const { type, target } = data.command;
+
+        if (target === 'automate_shipment') {
+          try {
+            setMessages((prev) => [
+              ...prev,
+              { sender: 'ai', text: 'Memproses optimisasi rute di background, mohon tunggu beberapa saat...' },
+            ]);
+            
+            const { start_date, end_date, optimization_type } = data.command.data || {};
+            let optType = optimization_type || 'distance';
+            if (optType === 'route') {
+              optType = 'distance';
+            } else if (optType === 'volume') {
+              optType = 'load';
+            } else if (optType === 'distance_volume') {
+              optType = 'balance';
+            }
+            
+            const formattedStartDate = new Date(start_date).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const formattedEndDate = new Date(end_date).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            
+            const doResponse = await axiosAuthInstance.get(`/delivery-orders?skip=0&limit=1000&start_date=${formattedStartDate}&end_date=${formattedEndDate}&status=READY`);
+            const deliveryOrders = doResponse.data?.data?.deliveryOrders || [];
+            
+            if (deliveryOrders.length === 0) {
+              setMessages((prev) => [
+                ...prev,
+                { sender: 'ai', text: 'Maaf, tidak ada Delivery Order yang berstatus READY pada rentang tanggal tersebut.' },
+              ]);
+              setIsLoading(false);
+              return;
+            }
+            
+            const doIds = deliveryOrders.map(item => item.id);
+            
+            let dc_id = '';
+            const token = sessionStorage.getItem('token');
+            if (token) {
+              const decodedToken = jwtDecode(token);
+              dc_id = decodedToken.role?.dc_id;
+            }
+            
+            const optResponse = await axiosAuthInstance.post(
+              `priority-opt`,
+              { delivery_orders_id: doIds, priority: optType },
+              { headers: { dc_id: dc_id }, timeout: 600000 }
+            );
+            
+            console.log('Pengiriman otomatis berhasil:', optResponse.data);
+            const shipmentsResult = optResponse.data?.data?.shipments || [];
+            
+            if (shipmentsResult.length === 0) {
+              setMessages((prev) => [
+                ...prev,
+                { sender: 'ai', text: 'Maaf, algoritma tidak dapat membentuk pengiriman (mungkin karena kapasitas truk tidak mencukupi, tidak ada truk tersedia, atau lokasi tidak terjangkau).' },
+              ]);
+              setIsLoading(false);
+              return;
+            }
+            
+            setMessages((prev) => [
+              ...prev,
+              { sender: 'ai', text: 'Pengiriman berhasil dibuat secara otomatis! Mengalihkan ke halaman riwayat pengiriman...' },
+            ]);
+            
+            setTimeout(() => {
+              let userRole = '';
+              if (token) {
+                const decodedToken = jwtDecode(token);
+                userRole = decodedToken.role?.name;
+              }
+              const basePath = userRole === 'Super' ? '/administrator' : '';
+              navigate(`${basePath}/pengiriman`);
+            }, 2500);
+            
+          } catch (error) {
+            console.error('Gagal membuat pengiriman otomatis:', error);
+            setMessages((prev) => [
+              ...prev,
+              { sender: 'ai', text: 'Terjadi kesalahan saat memproses optimisasi rute atau server terlalu sibuk.' },
+            ]);
+          }
+          setIsLoading(false);
+          return;
+        }
 
         const routeMap = {
           'shipments_list': '/shipment',
