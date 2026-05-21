@@ -1,13 +1,41 @@
 from datetime import datetime, time, timedelta
 import os
-import googlemaps
+import requests
 import polyline
 from .logger_utils import get_logger
 
-# Read API key from container environment (set via docker-compose)
-API_KEY = os.getenv('GOOGLE_MAPS_API_KEY') or os.getenv('API_KEY')
+# OSRM public server
+OSRM_BASE_URL = os.getenv('OSRM_BASE_URL', 'http://router.project-osrm.org')
 
 logger = get_logger(__name__)
+
+
+def _osrm_route_segment(origin_lat, origin_lon, dest_lat, dest_lon, with_polyline=False):
+    overview = 'full' if with_polyline else 'false'
+    # OSRM: koordinat dalam format lon,lat
+    url = (
+        f"{OSRM_BASE_URL}/route/v1/driving/"
+        f"{origin_lon},{origin_lat};{dest_lon},{dest_lat}"
+        f"?overview={overview}&geometries=polyline"
+    )
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get('code') == 'Ok' and data.get('routes'):
+            route = data['routes'][0]
+            result = {
+                'duration': route['duration'],
+                'distance': route['distance'],
+            }
+            if with_polyline:
+                result['geometry'] = route.get('geometry', '')
+            return result
+        else:
+            logger.warning(f"[_osrm_route_segment] OSRM code={data.get('code')}")
+    except Exception as e:
+        logger.warning(f"[_osrm_route_segment] Request gagal: {e}")
+    return None
 
 def nearest_neighbor_runner(bin_cluster_data, distances, times, distance_from_DC, duration_from_DC, ori_lat, ori_long):
     logger.info(f"[nearest_neighbor_runner] START - Processing {len(bin_cluster_data)} locations")
@@ -21,13 +49,12 @@ def nearest_neighbor_runner(bin_cluster_data, distances, times, distance_from_DC
 
     if (len(NN_unreachable_loc_dest_ids) == 0):
         logger.info("[nearest_neighbor_runner] All locations can be reached")
-
     else:
         logger.warning(f"[nearest_neighbor_runner] Unreachable locations: {NN_unreachable_loc_dest_ids}")
-    dc_banten_coords = f"{ori_lat},{ori_long}"
-    google_maps_client = googlemaps.Client(key=API_KEY)
+
+    dc_banten_coords = (ori_lat, ori_long)
     logger.info(f"[nearest_neighbor_runner] Fetching route coordinates")
-    NN_all_coords, NN_directions_results = fetch_concatenate_routes(NN_route_indexs, bin_cluster_data, google_maps_client, dc_banten_coords)
+    NN_all_coords, NN_directions_results = fetch_concatenate_routes(NN_route_indexs, bin_cluster_data, dc_banten_coords)
     
     logger.info(f"[nearest_neighbor_runner] COMPLETE - total_time={total_time}, total_distance={total_distance}m")
     return NN_all_coords, NN_directions_results, NN_route_loc_dest_ids, NN_unreachable_loc_dest_ids, total_time, total_time_with_waiting, total_distance, location_dest_info
@@ -143,65 +170,49 @@ def calculate_total_distance(route_indices, distance_matrix, distance_from_DC):
     return total_distance + distance_from_DC
 
 def fetch_concatenate_route(latitude, longitude, ori_lat, ori_long):
-    all_coords = []   
-    first_location_coords = (latitude, longitude)  # Use a tuple for coordinates
-    gmaps = googlemaps.Client(key=API_KEY)  # Initialize the client outside of the directions call
-    
-    # Fetch directions
-    first_segment_result = gmaps.directions(
-        origin=(ori_lat, ori_long),
-        destination=first_location_coords,
-        mode="driving",
-        departure_time=datetime.now()
-    )
-    
-    # Check if there is a result and extract polyline
-    if first_segment_result:
-        first_polyline_encoded = first_segment_result[0]['overview_polyline']['points']
-        first_polyline_decoded = polyline.decode(first_polyline_encoded)
-        all_coords.extend(first_polyline_decoded)
-        
+    all_coords = []
+    segment = _osrm_route_segment(ori_lat, ori_long, latitude, longitude, with_polyline=True)
+    if segment and segment.get('geometry'):
+        decoded = polyline.decode(segment['geometry'])
+        all_coords.extend(decoded)
+    else:
+        logger.warning(
+            f"[fetch_concatenate_route] Tidak ada polyline dari "
+            f"({ori_lat},{ori_long}) ke ({latitude},{longitude})"
+        )
     return all_coords
 
 
-def fetch_concatenate_routes(route_indices, location_data, google_maps_client, dc_banten_coords):
+def fetch_concatenate_routes(route_indices, location_data, dc_coords):
     all_direction_results = []
-    all_coords = []   
+    all_coords = []
 
+    dc_lat, dc_lon = float(dc_coords[0]), float(dc_coords[1])
+
+    # Segmen pertama: DC → lokasi pertama
     first_location = location_data.iloc[route_indices[0]]
-    first_location_coords = [first_location['latitude'], first_location['longitude']]
+    first_lat = first_location['latitude']
+    first_lon = first_location['longitude']
 
-    first_segment_result = google_maps_client.directions(
-        dc_banten_coords,
-        first_location_coords,
-        mode="driving",
-        departure_time=datetime.now()
-    )
-    if first_segment_result:
-        all_direction_results.extend(first_segment_result)
-        first_polyline_encoded = first_segment_result[0]['overview_polyline']['points']
-        first_polyline_decoded = polyline.decode(first_polyline_encoded)
-        all_coords.extend(first_polyline_decoded)
+    seg = _osrm_route_segment(dc_lat, dc_lon, first_lat, first_lon, with_polyline=True)
+    if seg:
+        all_direction_results.append(seg)
+        if seg.get('geometry'):
+            all_coords.extend(polyline.decode(seg['geometry']))
 
-     
+    # Segmen selanjutnya: antar titik pengiriman
     for i in range(len(route_indices) - 1):
-        start_point = location_data.iloc[route_indices[i]]
-        end_point = location_data.iloc[route_indices[i + 1]]
-        start_coords = [start_point['latitude'], start_point['longitude']]
-        end_coords = [end_point['latitude'], end_point['longitude']]
+        start = location_data.iloc[route_indices[i]]
+        end   = location_data.iloc[route_indices[i + 1]]
 
-         
-        directions_result = google_maps_client.directions(
-            start_coords,
-            end_coords,
-            mode="driving",
-            departure_time=datetime.now()
+        seg = _osrm_route_segment(
+            start['latitude'], start['longitude'],
+            end['latitude'],   end['longitude'],
+            with_polyline=True
         )
-         
-        if directions_result:
-            all_direction_results.extend(directions_result)
-            polyline_encoded = directions_result[0]['overview_polyline']['points']
-            polyline_decoded = polyline.decode(polyline_encoded)
-            all_coords.extend(polyline_decoded)
+        if seg:
+            all_direction_results.append(seg)
+            if seg.get('geometry'):
+                all_coords.extend(polyline.decode(seg['geometry']))
 
     return all_coords, all_direction_results

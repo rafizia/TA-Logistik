@@ -1,6 +1,5 @@
 import os
-import googlemaps
-import gmaps
+import requests
 from scipy.spatial.distance import cdist
 import numpy as np
 from geopy.distance import geodesic
@@ -12,8 +11,8 @@ from skopt.utils import use_named_args
 from datetime import datetime
 from .logger_utils import get_logger, log_step, log_external_call
 
-# Support reading API key only from environment
-API_KEY = os.getenv('GOOGLE_MAPS_API_KEY') or os.getenv('API_KEY')
+# OSRM public server
+OSRM_BASE_URL = os.getenv('OSRM_BASE_URL', 'http://router.project-osrm.org')
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -191,20 +190,39 @@ def validate_distance(locations, distances):
             if i != j and distance == 0:
                 origin = (locations.iloc[i]['latitude'], locations.iloc[i]['longitude'])
                 destination = (locations.iloc[j]['latitude'], locations.iloc[j]['longitude'])
-                if (origin != destination):
-                    result = gmaps.distance_matrix(f"{origin[0]},{origin[1]}", f"{destination[0]},{destination[1]}", mode="driving")
-                    print(result)
+                if origin != destination:
+                    logger.warning(
+                        f"[validate_distance] Zero distance detected: "
+                        f"({origin[0]:.5f},{origin[1]:.5f}) -> "
+                        f"({destination[0]:.5f},{destination[1]:.5f})"
+                    )
 
 def get_directions(origin, destination):
-    # Try Google Directions if key is available; otherwise or on failure, fallback to geodesic-based estimate
-    if API_KEY:
-        try:
-            gmaps_client = googlemaps.Client(key=API_KEY)
-            log_external_call(logger, "GoogleMaps", "directions", {"origin": str(origin)[:50], "dest": str(destination)[:50]})
-            return gmaps_client.directions(origin, destination, mode="driving")
-        except Exception as e:
-            logger.warning(f"[get_directions] Google Directions failed; using fallback: {e}")
-    # Fallback: compute straight-line distance and estimate duration using heuristic speeds
+    try:
+        # OSRM menggunakan urutan (lon, lat) — kebalikan dari (lat, lon)
+        origin_osrm = f"{origin[1]},{origin[0]}"
+        dest_osrm = f"{destination[1]},{destination[0]}"
+        url = f"{OSRM_BASE_URL}/route/v1/driving/{origin_osrm};{dest_osrm}?overview=false"
+
+        log_external_call(logger, "OSRM", "route", {"origin": str(origin)[:50], "dest": str(destination)[:50]})
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+
+        if data.get('code') == 'Ok' and data.get('routes'):
+            route = data['routes'][0]
+            return [{
+                'legs': [{
+                    'duration': {'value': route['duration']},
+                    'distance': {'value': route['distance']}
+                }]
+            }]
+        else:
+            logger.warning(f"[get_directions] OSRM response not OK: {data.get('code')}")
+    except Exception as e:
+        logger.warning(f"[get_directions] OSRM request failed; using geodesic fallback: {e}")
+
+    # Fallback: estimasi berdasarkan jarak garis lurus dan kecepatan heuristik
     try:
         distance_m = geodesic_distance(origin, destination)
         distance_km = distance_m / 1000.0
@@ -214,8 +232,7 @@ def get_directions(origin, destination):
             speed_kmh = 30
         else:
             speed_kmh = 40
-        duration_minutes = (distance_km / max(speed_kmh, 1)) * 60.0
-        duration_seconds = int(duration_minutes * 60)
+        duration_seconds = int((distance_km / max(speed_kmh, 1)) * 3600)
         return [{
             'legs': [{
                 'duration': {'value': duration_seconds},
@@ -223,8 +240,7 @@ def get_directions(origin, destination):
             }]
         }]
     except Exception as e:
-        print("[dbg] Fallback directions computation failed:", str(e))
-        # Last-resort constant values to avoid crashing
+        logger.error(f"[get_directions] Geodesic fallback juga gagal: {e}")
         return [{
             'legs': [{
                 'duration': {'value': 0},
