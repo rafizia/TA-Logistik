@@ -8,7 +8,7 @@ import SidebarAdmin from './components/SidebarAdmin';
 
 import { SystemDesign, Login, Dashboard, ViewAllLokasi, ViewAllTruksAdmin, NotFound, ViewAllTrucks, DashboardAdmin, 
     ViewAllLokasiAdmin, ViewAllUserAdmin, ViewAllRoleAdmin, ViewLokasiAdmin, ViewAllProdukAdmin, 
-    ViewAllProduk, ViewLocation, ViewAllProductLineAdmin, ViewAllProductLine, CreateTrukAdmin, UpdateTrukAdmin, CreateLokasiAdmin, UpdateLokasiAdmin } from './pages';
+    ViewAllProduk, ViewLocation, ViewAllProductLineAdmin, ViewAllProductLine, CreateTrukAdmin, UpdateTrukAdmin, CreateLokasiAdmin, UpdateLokasiAdmin, ImportTruk } from './pages';
 
 import PrivateRoute from './utils/private-route';
 
@@ -79,6 +79,7 @@ function ProtectedRoutes() {
           <Route path="/administrator/pengiriman/select-do-manual" element={<PrivateRoute><SidebarAdmin shipment={true} title="Pengiriman Manual"><DoSelectManualAdmin /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/truk/buat" element={<PrivateRoute><SidebarAdmin truk={true} title="Tambah Truk"><CreateTrukAdmin /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/truk/update" element={<PrivateRoute><SidebarAdmin truk={true} title="Ubah Truk"><UpdateTrukAdmin /></SidebarAdmin></PrivateRoute>} />
+          <Route path="/administrator/truk/import" element={<PrivateRoute><SidebarAdmin truk={true} title="Unggah Data Truk"><ImportTruk /></SidebarAdmin></PrivateRoute>} />
         </>
       ) : (
         <>
@@ -86,6 +87,7 @@ function ProtectedRoutes() {
           <Route path="/dashboard" element={<PrivateRoute><Sidebar beranda={true} title="Beranda"><Dashboard /></Sidebar></PrivateRoute>} />
           <Route path="/truk" element={<PrivateRoute><Sidebar truk={true} title="Daftar Truk"><ViewAllTrucks /></Sidebar></PrivateRoute>} />
           <Route path="/truk/update" element={<PrivateRoute><Sidebar truk={true} title="Ubah Truk"><UpdateTrukAdmin /></Sidebar></PrivateRoute>} />
+          <Route path="/truk/import" element={<PrivateRoute><Sidebar truk={true} title="Unggah Data Truk"><ImportTruk /></Sidebar></PrivateRoute>} />
           <Route path="/lokasi" element={<PrivateRoute><Sidebar lokasi={true} title="Daftar Lokasi"><ViewAllLokasi /></Sidebar></PrivateRoute>} />
           <Route path="/lokasi/buat" element={<PrivateRoute><Sidebar lokasi={true} title="Buat Lokasi"><CreateLokasiAdmin /></Sidebar></PrivateRoute>} />
           <Route path="/lokasi/update" element={<PrivateRoute><Sidebar lokasi={true} title="Ubah Lokasi"><UpdateLokasiAdmin /></Sidebar></PrivateRoute>} />

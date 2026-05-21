@@ -99,6 +99,7 @@ function ViewAllTruksAdmin() {
               className="bg-white border text-[#1F54A3] hover:bg-neutral-10 border-[#1F54A3] px-4 py-2 rounded-[4px] text-[14px] font-[500]"
               label="Unggah file"
               icon={<BsCloudUpload size={16} />}
+              onClick={() => navigate('/administrator/truk/import')}
             />
           </div>
           <div className="relative">
