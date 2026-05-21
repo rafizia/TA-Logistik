@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { LoadScript, GoogleMap, Polyline, Marker } from "@react-google-maps/api";
+import LeafletMap from "../../components/LeafletMap";
 import { Modal } from "../../components/Modal";
 import axiosAuthInstance from '../../utils/axios-auth-instance';
 
@@ -91,23 +91,23 @@ function DetailPengiriman({ pengiriman, updatePengirimanList }) {
     }
   }
 
-  const mapContainerStyle = {
-    width: "100%",
-    height: "400px",
-  };
+  const mapCenter =
+    routeCoordinates.length > 0
+      ? [routeCoordinates[0][0], routeCoordinates[0][1]]
+      : locationRoutes.length > 0
+      ? [locationRoutes[0].latitude, locationRoutes[0].longitude]
+      : [-6.2257, 106.7612];
 
-  // Determine map center - use first coordinate from all_coords or first location route
-  let center = { lat: 0, lng: 0 };
-  if (routeCoordinates.length > 0) {
-    center = { lat: routeCoordinates[0][0], lng: routeCoordinates[0][1] };
-  } else if (locationRoutes.length > 0) {
-    center = { lat: locationRoutes[0].latitude, lng: locationRoutes[0].longitude };
-  }
-
-  // Convert route coordinates to Google Maps format
-  const routePath = routeCoordinates.map(coord => ({
-    lat: coord[0],
-    lng: coord[1]
+  const leafletMarkers = locationRoutes.map((route, index) => ({
+    lat: route.latitude,
+    lng: route.longitude,
+    label: index + 1,
+    popup: (
+      <div>
+        <b>{route.is_dc ? route.dc?.name : route.customer?.name}</b>
+        <p style={{ margin: '4px 0 0' }}>{route.address}</p>
+      </div>
+    ),
   }));
 
   return (
@@ -115,41 +115,13 @@ function DetailPengiriman({ pengiriman, updatePengirimanList }) {
       <div className="bg-neutral-10 rounded-b-md p-6">
         <h2 className="text-lg font-medium mb-4">Peta Rute</h2>
         <div className="h-[400px] bg-gray-100 rounded-lg mb-4">
-          <LoadScript googleMapsApiKey={process.env.REACT_APP_GOOGLE_MAPS_KEY}>
-            <GoogleMap
-              key={pengiriman.shipment_num}
-              mapContainerStyle={mapContainerStyle}
-              center={center}
-              zoom={12}
-            >
-              {/* Render the route using Polyline from all_coords */}
-              {routePath.length > 0 && (
-                <Polyline
-                  path={routePath}
-                  options={{
-                    strokeColor: "#4285F4",
-                    strokeOpacity: 1.0,
-                    strokeWeight: 4,
-                  }}
-                />
-              )}
-
-              {/* Add markers for each location in the route */}
-              {locationRoutes.map((route, index) => (
-                <Marker
-                  key={`marker-${index}`}
-                  position={{ lat: route.latitude, lng: route.longitude }}
-                  label={{
-                    text: `${index + 1}`,
-                    color: "white",
-                    fontSize: "12px",
-                    fontWeight: "bold"
-                  }}
-                  title={route.is_dc ? route.dc?.name : route.customer?.name}
-                />
-              ))}
-            </GoogleMap>
-          </LoadScript>
+          <LeafletMap
+            center={mapCenter}
+            zoom={12}
+            height="400px"
+            polyline={routeCoordinates}
+            markers={leafletMarkers}
+          />
         </div>
 
         <div className="space-y-6">
