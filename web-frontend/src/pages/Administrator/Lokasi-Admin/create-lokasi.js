@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Button } from '../../../components/Button'
 import { Dropdown } from '../../../components/Dropdown'
 import { TextField } from '../../../components/TextField'
@@ -10,7 +10,7 @@ import axiosAuthInstance from '../../../utils/axios-auth-instance'
 
 function CreateLokasiAdmin() {
   let navigate = useNavigate()
-  const [dataPerusahaan, setDataPerusahaan] = useState([])
+  const [dataCustomer, setDataCustomer] = useState([])
   const [dataDC, setDataDC] = useState([])
   const [showLoading, setShowLoading] = useState(true)
 
@@ -18,17 +18,17 @@ function CreateLokasiAdmin() {
   const userRole = localStorage.getItem('userRole')
 
   useEffect(() => {
-    if (dataPerusahaan.length === 0) {
+    if (dataCustomer.length === 0) {
       axiosAuthInstance.get('/customers?limit=1000').then((response) => {
         const customerData = response.data.data.customers.map((item) => ({
           value: item.id,
           name: item.name
         }))
-        setDataPerusahaan(customerData)
+        setDataCustomer(customerData)
         setShowLoading(false)
       })
     }
-  }, [dataPerusahaan])
+  }, [dataCustomer])
 
   useEffect(() => {
     if (dataDC.length === 0) {
@@ -50,12 +50,52 @@ function CreateLokasiAdmin() {
     }
   }, [dataDC, dc_id])
 
+  const location = useLocation()
+  useEffect(() => {
+    if (location.state && dataCustomer.length > 0 && dataDC.length > 0) {
+      const stateData = location.state
+      console.log('Prefilling from AI:', stateData)
+
+      let updatedData = { ...newLokasiData }
+
+      if (stateData.address) updatedData.address = stateData.address
+      if (stateData.provinsi) updatedData.provinsi = stateData.provinsi
+      if (stateData.kabupaten_kota) updatedData.kabupaten_kota = stateData.kabupaten_kota
+      if (stateData.kecamatan) updatedData.kecamatan = stateData.kecamatan
+      if (stateData.desa_kelurahan) updatedData.desa_kelurahan = stateData.desa_kelurahan
+      if (stateData.kode_pos) updatedData.kode_pos = stateData.kode_pos
+      if (stateData.open_hour) updatedData.open_hour = stateData.open_hour
+      if (stateData.close_hour) updatedData.close_hour = stateData.close_hour
+      if (stateData.latitude) updatedData.latitude = stateData.latitude
+      if (stateData.longitude) updatedData.longitude = stateData.longitude
+
+      if (stateData.customer_id) {
+        const foundCustomer = dataCustomer.find((c) => c.value === stateData.customer_id || c.name.toLowerCase().includes(String(stateData.customer_id).toLowerCase()))
+        if (foundCustomer) {
+          setCustomerDropdown(foundCustomer)
+          updatedData.customer_id = foundCustomer.value
+        }
+      }
+
+      if (stateData.dc_id) {
+        const foundDC = dataDC.find((d) => d.value === stateData.dc_id || d.name.toLowerCase().includes(String(stateData.dc_id).toLowerCase()))
+        if (foundDC) {
+          setDCDropdown(foundDC)
+          updatedData.dc_id = foundDC.value
+        }
+      }
+
+      setNewLokasiData(updatedData)
+      window.history.replaceState({}, document.title)
+    }
+  }, [location.state, dataCustomer, dataDC])
+
   //Handle Create Req
   const [isOpenConfirmation, setIsOpenConfirmation] = useState(false)
   const [isOpenError, setIsOpenError] = useState(false)
   const [isOpenSuccess, setIsOpenSuccess] = useState(false)
   const [isError, setIsError] = useState(false)
-  const [perusahaanDropdown, setPerusahaanDropdown] = useState(null)
+  const [customerDropdown, setCustomerDropdown] = useState(null)
   const [dcDropdown, setDCDropdown] = useState(null)
 
   const [newLokasiData, setNewLokasiData] = useState({
@@ -77,8 +117,8 @@ function CreateLokasiAdmin() {
     setNewLokasiData({ ...newLokasiData, [name]: value })
   }
 
-  const handlePerusahaanDropdownChange = (selectedValue) => {
-    setPerusahaanDropdown(selectedValue)
+  const handleCustomerDropdownChange = (selectedValue) => {
+    setCustomerDropdown(selectedValue)
     setNewLokasiData({
       ...newLokasiData,
       customer_id: selectedValue.value
@@ -186,7 +226,7 @@ function CreateLokasiAdmin() {
               <TextField label="Kode Pos" placeholder="12345" required={true} className="w-full" value={newLokasiData.kode_pos || ""} onChange={(e) => handleInputChange('kode_pos', e.target.value)} isError={isError && checkAttributeNull(newLokasiData.kode_pos)} />
             </div>
 
-            <Dropdown placeholder="Pilih Perusahaan" label="Perusahaan " data={dataPerusahaan} className="w-full" required={true} value={perusahaanDropdown} onChange={handlePerusahaanDropdownChange} isError={isError && checkAttributeNull(perusahaanDropdown)} />
+            <Dropdown placeholder="Pilih Customer" label="Customer " data={dataCustomer} className="w-full" required={true} value={customerDropdown} onChange={handleCustomerDropdownChange} isError={isError && checkAttributeNull(customerDropdown)} />
 
             <div className="flex gap-4">
               <div className="w-full">

@@ -47,7 +47,7 @@ export default function AIChatbox({ onClose }) {
       const aiBaseUrl = process.env.REACT_APP_BACKEND_URL.includes('localhost') 
         ? 'http://localhost:8000' 
         : process.env.REACT_APP_BACKEND_URL.replace(/\/$/, "") + '/ai/';
-
+      //const aiBaseUrl = (process.env.REACT_APP_BACKEND_URL || "").replace(/\/$/, "") + '/ai/';
       const response = await fetch(`${aiBaseUrl}/chat`, {
         method: 'POST',
         headers: {
@@ -80,8 +80,8 @@ export default function AIChatbox({ onClose }) {
           'add_delivery_order': '/delivery-order/tambah',
           'edit_delivery_order': '/delivery-order/edit',
           'locations_list': '/lokasi',
-          'add_location': '/lokasi/tambah',
-          'edit_location': '/lokasi/edit',
+          'add_location': '/lokasi/buat',
+          'edit_location': '/lokasi/update',
           'dashboard': '/dashboard',
           'products_line_list': '/product-line',
           'add_product_line': '/product-line/tambah',

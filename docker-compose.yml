@@ -71,6 +71,7 @@ services:
     container_name: e2e_logistics_opt_algorithm
     environment:
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/paragon?schema=public
     restart: always
     ports:
       - "8001:8000"
@@ -217,6 +218,11 @@ services:
       - seccomp=unconfined
 
   ai-service:
+    ulimits:
+      stack: 8388608   
+      nproc: 40960
+    security_opt:
+      - seccomp=unconfined
     build: ./ai-service
     container_name: e2e_logistics_ai_service
     expose:
@@ -224,6 +230,9 @@ services:
     environment:
       - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/paragon
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - PYTHONUNBUFFERED=1
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
+      - OLLAMA_MODEL=${OLLAMA_MODEL}
     networks:
       - tms_net
     extra_hosts:
