@@ -75,14 +75,14 @@ def use_tools(db):
         Use this tool for CREATE, UPDATE, or DELETE operations on truck entities.
         Input must be a JSON string with:
         - action: 'CREATE', 'UPDATE', or 'DELETE'
-        - data: dictionary of truck fields.
-        For CREATE: requires plate_number, type_id, dc_id, first_status, created_by.
-          Optional: max_individual_capacity_volume.
+        - data: dictionary of truck fields (for UPDATE/DELETE), or LIST of truck dicts (for CREATE).
+        For CREATE: data must be a LIST of truck objects. Requires plate_number, type_id, dc_id, max_individual_capacity_volume, first_status, created_by.
+          Use this when user wants to create one or more trucks.
           IMPORTANT: plate_number MUST follow Indonesian license plate format:
           [1-2 letter area code] [1-4 digit registration number] [1-3 letter series code]
           Each part separated by a SINGLE SPACE. Example: "B 1234 RFS", "AB 12 CD".
+          Example: {"action": "CREATE", "data": [{"plate_number": "B 1234 AB", "type_id": 1, "dc_id": 1, "max_individual_capacity_volume": 1500000, "first_status": "AVAILABLE"}, {"plate_number": "B 5678 CD", "type_id": 1, "dc_id": 1, "max_individual_capacity_volume": 1000000, "first_status": "AVAILABLE"}]}
         For UPDATE/DELETE: requires plate_number or id.
-        Example: {"action": "CREATE", "data": {"plate_number": "B 1234 XY", "type_id": 1, "dc_id": 1, "first_status": "AVAILABLE", "created_by": "AI_Agent", "max_individual_capacity_volume": 150000}}
         """
         try:
             payload = json.loads(query)
@@ -90,21 +90,36 @@ def use_tools(db):
             data    = payload.get("data", {})
 
             if action == "CREATE":
-                # Validasi field wajib
-                required = ["plate_number", "type_id", "dc_id", "first_status"]
-                for field in required:
-                    if field not in data:
-                        return f"ERROR: Missing required field '{field}' for CREATE."
+                if not isinstance(data, list) or len(data) == 0:
+                    return "ERROR: For CREATE, 'data' must be a non-empty list of truck objects."
 
-                # Validasi format plat nomor Indonesia
-                plate = data.get("plate_number", "")
-                is_valid, error_msg = validate_plate_number(plate)
-                if not is_valid:
-                    return f"ERROR: {error_msg}"
+                required_fields = ["plate_number", "type_id", "dc_id", "max_individual_capacity_volume", "first_status"]
+                validated_trucks = []
+                errors = []
 
-                # Normalisasi: uppercase
-                data["plate_number"] = plate.strip().upper()
-                return f"SUCCESS:PREFILL:add_truck:{json.dumps(data)}"
+                for idx, truck in enumerate(data):
+                    # Validasi field
+                    missing = [f for f in required_fields if f not in truck]
+                    if missing:
+                        errors.append(f"Truk #{idx+1}: field wajib tidak lengkap ({', '.join(missing)})")
+                        continue
+
+                    # Validasi format plat
+                    plate = truck.get("plate_number", "")
+                    is_valid, error_msg = validate_plate_number(plate)
+                    if not is_valid:
+                        errors.append(f"Truk #{idx+1}: {error_msg}")
+                        continue
+
+                    truck["plate_number"] = plate.strip().upper()
+                    if "first_status" not in truck:
+                        truck["first_status"] = "AVAILABLE"
+                    validated_trucks.append(truck)
+
+                if errors:
+                    return f"ERROR: Terdapat data tidak valid:\n" + "\n".join(errors)
+
+                return f"SUCCESS:PREFILL:bulk_add_truck:{json.dumps(validated_trucks)}"
 
             elif action == "UPDATE":
                 identifier = data.get("plate_number") or data.get("id")

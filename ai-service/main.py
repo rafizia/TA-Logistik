@@ -57,7 +57,7 @@ agent_executor = create_sql_agent(
     prompt=PROMPT,
     extra_tools=tools,
     max_iterations=30,
-    max_execution_time=120,
+    #max_execution_time=120,
     early_stopping_method="force",
     agent_executor_kwargs={
         "return_intermediate_steps": True, 
@@ -107,18 +107,12 @@ async def chat_with_ai(request: ChatRequest):
                      "target": target
                 }
             elif "SUCCESS:PREFILL:" in str(observation):
-                obs_str = str(observation)
+                obs_str = str(observation).strip()
                 try:
                     parts = obs_str.split(":", 3)
                     target = parts[2] if len(parts) > 2 else "dashboard"
-                    
-                    json_start = obs_str.find("{")
-                    json_end = obs_str.rfind("}")
-                    if json_start != -1 and json_end != -1:
-                        json_str = obs_str[json_start:json_end+1]
-                        payload_data = json.loads(json_str)
-                    else:
-                        payload_data = {}
+                    json_str = parts[3].strip() if len(parts) > 3 else ""
+                    payload_data = json.loads(json_str) if json_str else {}
                         
                     command_payload = {
                         "type": "PREFILL",

@@ -161,6 +161,7 @@ export default function AIChatbox({ onClose }) {
           'edit_shipment': '/shipment/edit',
           'trucks_list': '/truk',
           'add_truck': '/truk/buat',
+          'bulk_add_truck': '/truk/bulk-buat',
           'edit_truck': '/truk/update',
           'delivery_orders_list': '/delivery-order',
           'add_delivery_order': '/delivery-order/tambah',
