@@ -93,7 +93,7 @@ async def chat_with_ai(request: ChatRequest):
         
         # Iterate over messages in reverse to find the latest tool call or final answer
         for msg in reversed(final_messages):
-            if msg.type == "tool" and msg.name in ["system_control", "manage_truck", "manage_location"]:
+            if msg.type == "tool" and msg.name in ["system_control", "manage_truck", "manage_location", "automate_shipment"]:
                 # tool returned a direct dict or stringified JSON
                 try:
                     output = msg.content

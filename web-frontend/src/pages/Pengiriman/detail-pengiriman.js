@@ -2,8 +2,12 @@ import React, { useState, useEffect } from "react";
 import LeafletMap from "../../components/LeafletMap";
 import { Modal } from "../../components/Modal";
 import axiosAuthInstance from '../../utils/axios-auth-instance';
+import { toast } from 'react-toastify';
+import { useNavigate } from 'react-router-dom';
+import jwtDecode from 'jwt-decode';
 
 function DetailPengiriman({ pengiriman, updatePengirimanList }) {
+  const navigate = useNavigate();
   const [modalKonfirmasi, setModalKonfirmasi] = useState(false);
 
   useEffect(() => {
@@ -37,14 +41,29 @@ function DetailPengiriman({ pengiriman, updatePengirimanList }) {
 
   const handleSimpanPengiriman = async () => {
     try {
-      await axiosAuthInstance.patch(`/shipment/simpan/${pengiriman.shipment_num}`, {
-        action: 'Simpan'
-      });
+      if (pengiriman.shipment_num?.startsWith('DRAF')) {
+        await axiosAuthInstance.post('/priority-opt/bulk-save', { shipments: [pengiriman] });
+      } else {
+        await axiosAuthInstance.patch(`/shipment/simpan/${pengiriman.shipment_num}`, {
+          action: 'Simpan'
+        });
+      }
       updatePengirimanList(pengiriman.shipment_num, 'saved');
       setModalKonfirmasi(false);
+      toast.success('Pengiriman berhasil disimpan!');
+      
+      let userRole = '';
+      const token = sessionStorage.getItem('token');
+      if (token) {
+        const decodedToken = jwtDecode(token);
+        userRole = decodedToken.role?.name;
+      }
+      const basePath = userRole === 'Super' ? '/administrator' : '';
+      navigate(`${basePath}/pengiriman`);
+      
     } catch (error) {
       console.error('Gagal menyimpan pengiriman:', error);
-      alert('Terjadi kesalahan saat menyimpan pengiriman.');
+      toast.error('Terjadi kesalahan saat menyimpan pengiriman.');
     }
   };
 

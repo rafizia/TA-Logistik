@@ -40,7 +40,7 @@ import {
   getAllCustomersController,
   getCustomerByIdController,
 } from "../controllers/customers-controller.js"; //CUSTOMER
-import { priorityOptimizationController } from "../controllers/optimization-controller.js"; //OPTIMIZATION
+import { priorityOptimizationController, bulkSaveShipmentController } from "../controllers/optimization-controller.js"; //OPTIMIZATION
 import {
   addBoxToDOController,
   boxDimensionCalculation,
@@ -812,9 +812,8 @@ restrictedRouter.patch(
  *       401:
  *         description: Unauthorized
  */
-restrictedRouter.post("/api/v1/priority-opt", priorityOptimizationController
-
-);
+restrictedRouter.post("/api/v1/priority-opt", priorityOptimizationController);
+restrictedRouter.post("/api/v1/priority-opt/bulk-save", bulkSaveShipmentController);
 
 /**
  * @swagger

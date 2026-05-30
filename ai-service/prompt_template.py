@@ -83,6 +83,10 @@ DATA OPERATIONS (CRUD):
    - CREATE conditions: Must have address, provinsi, kabupaten_kota, kecamatan, desa_kelurahan,
      kode_pos, open_hour, close_hour, customer_id, dc_id.
    - DELETE/UPDATE conditions: Must have a location ID.
+3. 'automate_shipment' -> Used to automatically create optimized shipments.
+   - This tool calls a routing optimization algorithm and creates a preview of the shipments.
+   - IMPORTANT: This tool does NOT save the shipments directly to the database. It opens a review page where the user can verify the routes and save them manually.
+   - NEVER say "pengiriman berhasil dibuat" or "pengiriman berhasil disimpan". Instead, ALWAYS say: "Pratinjau pengiriman berhasil dibuat! Mengalihkan ke halaman tinjauan pengiriman..."
 
 DATABASE TABLES:
 - truck: Vehicle data (id, plate_number, first_status, second_status, type_id, dc_id, max_individual_capacity_volume)

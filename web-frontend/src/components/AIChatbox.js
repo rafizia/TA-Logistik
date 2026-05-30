@@ -110,10 +110,12 @@ export default function AIChatbox({ onClose }) {
             const deliveryOrders = doResponse.data?.data?.deliveryOrders || [];
             
             if (deliveryOrders.length === 0) {
+              const errMsg = 'Maaf, tidak ada Delivery Order yang berstatus READY pada kriteria filter tersebut untuk DC Anda.';
               setMessages((prev) => [
                 ...prev,
-                { sender: 'ai', text: 'Maaf, tidak ada Delivery Order yang berstatus READY pada kriteria filter tersebut.' },
+                { sender: 'ai', text: errMsg },
               ]);
+              alert(errMsg); // Add alert so user clearly sees why it didn't navigate
               setIsLoading(false);
               return;
             }
@@ -124,11 +126,11 @@ export default function AIChatbox({ onClose }) {
             const token = sessionStorage.getItem('token');
             if (token) {
               const decodedToken = jwtDecode(token);
-              dc_id = decodedToken.role?.dc_id;
+              dc_id = decodedToken.dc_id || decodedToken.role?.dc_id; // Check both places
             }
             
             const optResponse = await axiosAuthInstance.post(
-              `priority-opt`,
+              `priority-opt?preview=true`,
               { delivery_orders_id: doIds, priority: optType },
               { headers: { dc_id: dc_id }, timeout: 600000 }
             );
@@ -137,17 +139,19 @@ export default function AIChatbox({ onClose }) {
             const shipmentsResult = optResponse.data?.data?.shipments || [];
             
             if (shipmentsResult.length === 0) {
+              const errMsg = 'Maaf, algoritma tidak dapat membentuk pengiriman (mungkin karena kapasitas truk tidak mencukupi, tidak ada truk tersedia, atau lokasi tidak terjangkau).';
               setMessages((prev) => [
                 ...prev,
-                { sender: 'ai', text: 'Maaf, algoritma tidak dapat membentuk pengiriman (mungkin karena kapasitas truk tidak mencukupi, tidak ada truk tersedia, atau lokasi tidak terjangkau).' },
+                { sender: 'ai', text: errMsg },
               ]);
+              alert(errMsg);
               setIsLoading(false);
               return;
             }
             
             setMessages((prev) => [
               ...prev,
-              { sender: 'ai', text: 'Pengiriman berhasil dibuat secara otomatis! Mengalihkan ke halaman riwayat pengiriman...' },
+              { sender: 'ai', text: 'Pratinjau pengiriman berhasil dibuat! Mengalihkan ke halaman tinjauan pengiriman...' },
             ]);
             
             setTimeout(() => {
@@ -157,17 +161,22 @@ export default function AIChatbox({ onClose }) {
                 userRole = decodedToken.role?.name;
               }
               const basePath = userRole === 'Super' ? '/administrator' : '';
-              navigate(`${basePath}/pengiriman`);
+              // Store response data to pass it to the review page
+              sessionStorage.setItem('automate_shipment_data', JSON.stringify(optResponse.data));
+              navigate(`${basePath}/pengiriman/otomatisasi`, { state: { optResponse: optResponse.data } });
             }, 2500);
             
           } catch (error) {
             console.error('Gagal membuat pengiriman otomatis:', error);
+            const errMsg = 'Terjadi kesalahan saat memproses optimisasi rute atau server terlalu sibuk.';
             setMessages((prev) => [
               ...prev,
-              { sender: 'ai', text: 'Terjadi kesalahan saat memproses optimisasi rute atau server terlalu sibuk.' },
+              { sender: 'ai', text: errMsg },
             ]);
+            alert(errMsg);
+          } finally {
+            setIsLoading(false);
           }
-          setIsLoading(false);
           return;
         }
 

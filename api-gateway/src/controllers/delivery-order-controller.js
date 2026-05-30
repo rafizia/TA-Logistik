@@ -39,18 +39,22 @@ const getAllDOController = async (request, response, next) => {
     const type = request.decodedToken.type;
     console.log(type);
     const role = request.decodedToken.role;
-    let { start_date = "", end_date = "", status = null } = request.query;
-    if (role.name != "Super" && role.is_allowed_do && type == "web") {
+    let { start_date = "", end_date = "", status = null, customer_id = null, kabupaten_kota = null, so_origin = null, delivery_order_num = null } = request.query;
+    if ((role.name === "Super" || role.is_allowed_do) && type == "web") {
       const limit = parseInt(request.query.limit) || 10;
       const skip = parseInt(request.query.skip) || 0;
-      const dcId = role.dc_id;
+      const dcId = role.name === "Super" ? null : role.dc_id;
       const { deliveryOrders, total } = await getAllDOsService(
         dcId,
         skip,
         limit,
         start_date,
         end_date,
-        status
+        status,
+        customer_id,
+        kabupaten_kota,
+        so_origin,
+        delivery_order_num
       );
       const result = {
         deliveryOrders,

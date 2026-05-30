@@ -267,30 +267,46 @@ def use_tools(db):
         except Exception as e:
             return {"ui_action": "ERROR", "message": f"ERROR: {str(e)}"}
 
-    @tool
-    def automate_shipment(query: dict | str) -> str:
+    @tool(return_direct=True)
+    def automate_shipment(
+        optimization_type: str,
+        start_date: str = None,
+        end_date: str = None,
+        customer_id: int = None,
+        customer_name: str = None,
+        kabupaten_kota: str = None,
+        so_origin: str = None,
+        delivery_order_num: str = None
+    ) -> dict:
         """
         Use this tool to automatically create a shipment with optimization based on user request.
-        Input must be a JSON string with:
-        - start_date: 'YYYY-MM-DD' (optional, YYYY-MM-DD format)
-        - end_date: 'YYYY-MM-DD' (optional, YYYY-MM-DD format)
+        Parameters:
+        - optimization_type: 'distance' (for route optimization), 'emission' (for emissions), 'load' (for load optimization), or 'balance' (for distance and volume)
+        - start_date: 'YYYY-MM-DD' (optional)
+        - end_date: 'YYYY-MM-DD' (optional)
         - customer_id: integer (optional, ID of the customer from get_available_options)
         - customer_name: string (optional, Name of the customer)
         - kabupaten_kota: string (optional, City/District region name, e.g. 'Jakarta Selatan')
         - so_origin: string (optional, SO document origin/number, e.g. 'SO-001')
         - delivery_order_num: string (optional, DO document number, e.g. 'PRM/#DO-0019')
-        - optimization_type: 'distance' (for route optimization), 'emission' (for emissions), 'load' (for load optimization), or 'balance' (for distance and volume)
-        Example: {"start_date": "2026-06-01", "end_date": "2026-06-05", "customer_name": "PT Paragon", "kabupaten_kota": "Jakarta Selatan", "so_origin": "SO-001", "optimization_type": "distance"}
         """
         try:
-            payload = query if isinstance(query, dict) else json.loads(query)
-            required = ["optimization_type"]
-            for field in required:
-                if field not in payload:
-                    return f"ERROR: Missing required field '{field}' for automate_shipment."
+            payload = {
+                "optimization_type": optimization_type,
+                "start_date": start_date,
+                "end_date": end_date,
+                "customer_id": customer_id,
+                "customer_name": customer_name,
+                "kabupaten_kota": kabupaten_kota,
+                "so_origin": so_origin,
+                "delivery_order_num": delivery_order_num
+            }
+            # Remove None values
+            payload = {k: v for k, v in payload.items() if v is not None}
             
-            customer_name = payload.get("customer_name")
-            customer_id = payload.get("customer_id")
+            if not optimization_type:
+                return {"ui_action": "ERROR", "message": "ERROR: Missing required field 'optimization_type' for automate_shipment."}
+            
             if customer_name and not customer_id:
                 try:
                     sql = text("SELECT id FROM customer WHERE name ILIKE :name AND is_deleted = false")
@@ -302,8 +318,13 @@ def use_tools(db):
                     print(f"Error looking up customer in tools: {e}")
 
             payload["auto_submit"] = True
-            return f"SUCCESS:PREFILL:automate_shipment:{json.dumps(payload)}"
+            return {
+                "ui_action": "PREFILL",
+                "target": "automate_shipment",
+                "data": payload,
+                "message": "Memulai proses pembuatan rute pengiriman otomatis berdasarkan kriteria Anda."
+            }
         except Exception as e:
-            return f"ERROR: {str(e)}"
+            return {"ui_action": "ERROR", "message": f"ERROR: {str(e)}"}
 
     return [system_control, get_available_options, manage_truck, manage_location, automate_shipment]
