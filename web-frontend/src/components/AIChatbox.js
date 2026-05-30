@@ -77,7 +77,7 @@ export default function AIChatbox({ onClose }) {
               { sender: 'ai', text: 'Memproses optimisasi rute di background, mohon tunggu beberapa saat...' },
             ]);
             
-            const { start_date, end_date, optimization_type } = data.command.data || {};
+            const { start_date, end_date, optimization_type, customer_id, kabupaten_kota, so_origin, delivery_order_num } = data.command.data || {};
             let optType = optimization_type || 'distance';
             if (optType === 'route') {
               optType = 'distance';
@@ -87,16 +87,32 @@ export default function AIChatbox({ onClose }) {
               optType = 'balance';
             }
             
-            const formattedStartDate = new Date(start_date).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            const formattedEndDate = new Date(end_date).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            let url = `/delivery-orders?skip=0&limit=1000&status=READY`;
+            if (start_date && end_date) {
+              const formattedStartDate = new Date(start_date).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
+              const formattedEndDate = new Date(end_date).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
+              url += `&start_date=${formattedStartDate}&end_date=${formattedEndDate}`;
+            }
+            if (customer_id) {
+              url += `&customer_id=${customer_id}`;
+            }
+            if (kabupaten_kota) {
+              url += `&kabupaten_kota=${encodeURIComponent(kabupaten_kota)}`;
+            }
+            if (so_origin) {
+              url += `&so_origin=${encodeURIComponent(so_origin)}`;
+            }
+            if (delivery_order_num) {
+              url += `&delivery_order_num=${encodeURIComponent(delivery_order_num)}`;
+            }
             
-            const doResponse = await axiosAuthInstance.get(`/delivery-orders?skip=0&limit=1000&start_date=${formattedStartDate}&end_date=${formattedEndDate}&status=READY`);
+            const doResponse = await axiosAuthInstance.get(url);
             const deliveryOrders = doResponse.data?.data?.deliveryOrders || [];
             
             if (deliveryOrders.length === 0) {
               setMessages((prev) => [
                 ...prev,
-                { sender: 'ai', text: 'Maaf, tidak ada Delivery Order yang berstatus READY pada rentang tanggal tersebut.' },
+                { sender: 'ai', text: 'Maaf, tidak ada Delivery Order yang berstatus READY pada kriteria filter tersebut.' },
               ]);
               setIsLoading(false);
               return;
@@ -163,6 +179,7 @@ export default function AIChatbox({ onClose }) {
           'add_truck': '/truk/buat',
           'bulk_add_truck': '/truk/bulk-buat',
           'edit_truck': '/truk/update',
+          'bulk_edit_truck': '/truk/bulk-ubah',
           'delivery_orders_list': '/delivery-order',
           'add_delivery_order': '/delivery-order/tambah',
           'edit_delivery_order': '/delivery-order/edit',

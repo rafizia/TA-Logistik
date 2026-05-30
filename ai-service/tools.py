@@ -25,23 +25,26 @@ def use_tools(db):
     Parameter db: instance SQLDatabase dari main.py.
     """
 
-    @tool
-    def system_control(query: str) -> str:
+    @tool(return_direct=True)
+    def system_control(action_type: str = "NAVIGATE", target_page: str = "dashboard") -> dict:
         """
         VERY IMPORTANT: Use this tool for navigation or system actions.
-        The Action Input MUST be a valid JSON string with 'action_type' and 'target_page'.
-        Example Action Input: {"action_type": "NAVIGATE", "target_page": "trucks_list"}
         """
         try:
-            data = json.loads(query)
-            action_type = data.get("action_type", "NAVIGATE")
-            target_page = data.get("target_page", "dashboard")
-            return f"SUCCESS:{action_type}:{target_page}"
+            return {
+                "ui_action": action_type,
+                "target": target_page,
+                "message": f"Mengarahkan Anda ke halaman {target_page.replace('_', ' ')}..."
+            }
         except Exception:
-            return f"SUCCESS:NAVIGATE:{query}"
+            return {
+                "ui_action": "NAVIGATE",
+                "target": "dashboard",
+                "message": "Terjadi kesalahan navigasi."
+            }
 
     @tool
-    def get_available_options(query: str = "") -> str:
+    def get_available_options(query: str | dict = "") -> str:
         """
         Fetches available dropdown options for trucks and locations:
         - Vehicle Types (name and id)
@@ -69,14 +72,14 @@ def use_tools(db):
         except Exception as e:
             return f"Error fetching options: {str(e)}"
 
-    @tool
-    def manage_truck(query: str) -> str:
+    @tool(return_direct=True)
+    def manage_truck(query: dict | str) -> dict:
         """
         Use this tool for CREATE, UPDATE, or DELETE operations on truck entities.
         Input must be a JSON string with:
         - action: 'CREATE', 'UPDATE', or 'DELETE'
         - data: dictionary of truck fields (for UPDATE/DELETE), or LIST of truck dicts (for CREATE).
-        For CREATE: data must be a LIST of truck objects. Requires plate_number, type_id, dc_id, max_individual_capacity_volume, first_status, created_by.
+        For CREATE: data must be a LIST of truck objects. Requires plate_number, type_id, dc_id, max_individual_capacity_volume, first_status
           Use this when user wants to create one or more trucks.
           IMPORTANT: plate_number MUST follow Indonesian license plate format:
           [1-2 letter area code] [1-4 digit registration number] [1-3 letter series code]
@@ -85,13 +88,13 @@ def use_tools(db):
         For UPDATE/DELETE: requires plate_number or id.
         """
         try:
-            payload = json.loads(query)
-            action  = payload.get("action").upper()
+            payload = query if isinstance(query, dict) else json.loads(query)
+            action  = payload.get("action", "").upper()
             data    = payload.get("data", {})
 
             if action == "CREATE":
                 if not isinstance(data, list) or len(data) == 0:
-                    return "ERROR: For CREATE, 'data' must be a non-empty list of truck objects."
+                    return {"ui_action": "ERROR", "message": "ERROR: For CREATE, 'data' must be a non-empty list of truck objects."}
 
                 required_fields = ["plate_number", "type_id", "dc_id", "max_individual_capacity_volume", "first_status"]
                 validated_trucks = []
@@ -117,54 +120,85 @@ def use_tools(db):
                     validated_trucks.append(truck)
 
                 if errors:
-                    return f"ERROR: Terdapat data tidak valid:\n" + "\n".join(errors)
+                    return {"ui_action": "ERROR", "message": f"ERROR: Terdapat data tidak valid:\n" + "\n".join(errors)}
 
-                return f"SUCCESS:PREFILL:bulk_add_truck:{json.dumps(validated_trucks)}"
+                return {
+                    "ui_action": "PREFILL",
+                    "target": "bulk_add_truck",
+                    "data": validated_trucks,
+                    "message": "Data truk telah disiapkan. Silakan periksa dan simpan di halaman review yang akan dibuka."
+                }
 
             elif action == "UPDATE":
-                identifier = data.get("plate_number") or data.get("id")
-                if not identifier:
-                    return "ERROR: Missing plate_number or id for UPDATE."
+                if isinstance(data, dict):
+                    data = [data]
+                
+                if not data:
+                    return {"ui_action": "ERROR", "message": "ERROR: For UPDATE, 'data' must be a non-empty list of truck objects."}
 
-                truck_id = data.get("id")
-                if not truck_id:
-                    sql = text("SELECT id FROM truck WHERE plate_number = :plate")
+                validated_trucks = []
+                errors = []
+
+                for idx, truck in enumerate(data):
+                    identifier = truck.get("plate_number") or truck.get("id")
+                    if not identifier:
+                        errors.append(f"Truk #{idx+1}: Missing plate_number or id for UPDATE.")
+                        continue
+
+                    ident_id = int(identifier) if str(identifier).isdigit() else 0
+
+                    sql = text("SELECT id, plate_number, type_id, dc_id, max_individual_capacity_volume, first_status, second_status FROM truck WHERE plate_number = :ident OR id = :ident_id")
                     with db._engine.connect() as conn:
-                        result = conn.execute(sql, {"plate": identifier}).fetchone()
+                        result = conn.execute(sql, {"ident": str(identifier), "ident_id": ident_id}).fetchone()
                         if not result:
-                            return f"ERROR: Truck with plate {identifier} not found."
-                        truck_id = result[0]
+                            errors.append(f"Truk #{idx+1}: Truk dengan plat/id {identifier} tidak ditemukan.")
+                            continue
+                        
+                        db_id, db_plate, db_type, db_dc, db_vol, db_fs, db_ss = result
+                        
+                        merged_truck = {
+                            "id": db_id,
+                            "plate_number": truck.get("plate_number", db_plate),
+                            "type_id": truck.get("type_id", db_type),
+                            "dc_id": truck.get("dc_id", db_dc),
+                            "max_individual_capacity_volume": truck.get("max_individual_capacity_volume", db_vol),
+                            "first_status": truck.get("first_status") or truck.get("status") or db_fs,
+                            "second_status": truck.get("second_status", db_ss)
+                        }
+                        validated_trucks.append(merged_truck)
 
-                prefill_data = {
-                    "Id": truck_id,
-                    "prefill": {
-                        "dc_id": data.get("dc_id"),
-                        "status": (
-                            data.get("status") or data.get("first_status") or
-                            data.get("second_status") or data.get("third_status")
-                        ),
-                    },
+                if errors:
+                    return {"ui_action": "ERROR", "message": f"ERROR: Terdapat data tidak valid:\n" + "\n".join(errors)}
+
+                return {
+                    "ui_action": "PREFILL",
+                    "target": "bulk_edit_truck",
+                    "data": validated_trucks,
+                    "message": "Data truk siap diedit."
                 }
-                return f"SUCCESS:PREFILL:edit_truck:{json.dumps(prefill_data)}"
 
             elif action == "DELETE":
                 identifier = data.get("plate_number") or data.get("id")
                 if not identifier:
-                    return "ERROR: Missing plate_number or id for DELETE."
+                    return {"ui_action": "ERROR", "message": "ERROR: Missing plate_number or id for DELETE."}
 
                 where_clause = "plate_number = :ident" if data.get("plate_number") else "id = :ident"
                 sql = text(f"DELETE FROM truck WHERE {where_clause}")
                 with db._engine.connect() as conn:
                     conn.execute(sql, {"ident": identifier})
                     conn.commit()
-                return f"SUCCESS: Truck {identifier} deleted successfully."
+                return {
+                    "ui_action": "NAVIGATE",
+                    "target": "trucks_list",
+                    "message": f"Truk {identifier} berhasil dihapus."
+                }
 
-            return "ERROR: Invalid action."
+            return {"ui_action": "ERROR", "message": "ERROR: Invalid action."}
         except Exception as e:
-            return f"ERROR: {str(e)}"
+            return {"ui_action": "ERROR", "message": f"ERROR: {str(e)}"}
 
     @tool
-    def manage_location(query: str) -> str:
+    def manage_location(query: dict | str) -> str:
         """
         Use this tool for CREATE, UPDATE, or DELETE operations on location entities.
         Input must be a JSON string with:
@@ -178,8 +212,8 @@ def use_tools(db):
         Example: {"action": "CREATE", "data": {"address": "Jl. Merdeka 1", "provinsi": "DKI Jakarta", "kabupaten_kota": "Jakarta Pusat", "kecamatan": "Gambir", "desa_kelurahan": "Gambir", "kode_pos": "10110", "open_hour": "08:00", "close_hour": "17:00", "customer_id": 1, "dc_id": 1}}
         """
         try:
-            payload = json.loads(query)
-            action  = payload.get("action").upper()
+            payload = query if isinstance(query, dict) else json.loads(query)
+            action  = payload.get("action", "").upper()
             data    = payload.get("data", {})
 
             if action == "CREATE":
@@ -215,22 +249,39 @@ def use_tools(db):
             return f"ERROR: {str(e)}"
 
     @tool
-    def automate_shipment(query: str) -> str:
+    def automate_shipment(query: dict | str) -> str:
         """
         Use this tool to automatically create a shipment with optimization based on user request.
         Input must be a JSON string with:
-        - start_date: 'YYYY-MM-DD'
-        - end_date: 'YYYY-MM-DD'
+        - start_date: 'YYYY-MM-DD' (optional, YYYY-MM-DD format)
+        - end_date: 'YYYY-MM-DD' (optional, YYYY-MM-DD format)
+        - customer_id: integer (optional, ID of the customer from get_available_options)
+        - customer_name: string (optional, Name of the customer)
+        - kabupaten_kota: string (optional, City/District region name, e.g. 'Jakarta Selatan')
+        - so_origin: string (optional, SO document origin/number, e.g. 'SO-001')
+        - delivery_order_num: string (optional, DO document number, e.g. 'PRM/#DO-0019')
         - optimization_type: 'distance' (for route optimization), 'emission' (for emissions), 'load' (for load optimization), or 'balance' (for distance and volume)
-        Example: {"start_date": "2025-01-01", "end_date": "2025-02-28", "optimization_type": "distance"}
+        Example: {"start_date": "2026-06-01", "end_date": "2026-06-05", "customer_name": "PT Paragon", "kabupaten_kota": "Jakarta Selatan", "so_origin": "SO-001", "optimization_type": "distance"}
         """
         try:
-            payload = json.loads(query)
-            required = ["start_date", "end_date", "optimization_type"]
+            payload = query if isinstance(query, dict) else json.loads(query)
+            required = ["optimization_type"]
             for field in required:
                 if field not in payload:
                     return f"ERROR: Missing required field '{field}' for automate_shipment."
             
+            customer_name = payload.get("customer_name")
+            customer_id = payload.get("customer_id")
+            if customer_name and not customer_id:
+                try:
+                    sql = text("SELECT id FROM customer WHERE name ILIKE :name AND is_deleted = false")
+                    with db._engine.connect() as conn:
+                        row = conn.execute(sql, {"name": f"%{customer_name}%"}).fetchone()
+                    if row:
+                        payload["customer_id"] = row[0]
+                except Exception as e:
+                    print(f"Error looking up customer in tools: {e}")
+
             payload["auto_submit"] = True
             return f"SUCCESS:PREFILL:automate_shipment:{json.dumps(payload)}"
         except Exception as e:

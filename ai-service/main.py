@@ -6,18 +6,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from langchain_ollama import ChatOllama
 from pydantic import BaseModel
 from langchain_community.utilities.sql_database import SQLDatabase
-from langchain_community.agent_toolkits import create_sql_agent, SQLDatabaseToolkit
+from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_core.prompts import PromptTemplate
 from prompt_template import AGENT_TEMPLATE
 from tools import use_tools
+from langchain.agents import create_agent
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 app = FastAPI()
-
-@app.on_event("startup")
-async def startup():
-    print("AI Service is starting up...")
 
 app.add_middleware(
     CORSMiddleware,
@@ -50,20 +47,27 @@ PROMPT = PromptTemplate(
     template=AGENT_TEMPLATE
 )
 
-agent_executor = create_sql_agent(
-    llm=llm,
-    toolkit=toolkit,
-    verbose=True,
-    prompt=PROMPT,
-    extra_tools=tools,
-    max_iterations=30,
-    #max_execution_time=120,
-    early_stopping_method="force",
-    agent_executor_kwargs={
-        "return_intermediate_steps": True, 
-        "handle_parsing_errors": True,
-    }
+all_tools = tools + toolkit.get_tools()
+sys_prompt = AGENT_TEMPLATE
+
+agent = create_agent(
+    model=llm,
+    tools=all_tools,
+    system_prompt=sys_prompt,
+    debug=True
 )
+
+'''
+agent_executor = AgentExecutor(
+    agent=agent,
+    tools=all_tools,
+    verbose=True,
+    max_iterations=30,
+    max_execution_time=120,
+    early_stopping_method="force",
+    handle_parsing_errors=True,
+    return_intermediate_steps=True
+)'''
 
 class ChatRequest(BaseModel):
     query: str
@@ -72,60 +76,70 @@ class ChatRequest(BaseModel):
 @app.post("/chat")
 async def chat_with_ai(request: ChatRequest):
     try:
-        # Format history for the prompt
-        history_text = ""
+        # Format history into messages
+        messages = []
         for msg in request.history:
-            sender = "User" if msg.get("sender") == "user" else "AI"
-            history_text += f"{sender}: {msg.get('text')}\n"
+            role = "user" if msg.get("sender") == "user" else "assistant"
+            messages.append({"role": role, "content": msg.get("text")})
             
-        response = await agent_executor.ainvoke({
-            "input": request.query,
-            "history": history_text
-        })
+        messages.append({"role": "user", "content": request.query})
+
+        # create_agent
+        response = await agent.ainvoke({"messages": messages})
         
-        reply_text = response.get('output', '')
+        final_messages = response.get("messages", [])     
+        reply_text = ""
         command_payload = None
         
-        steps = response.get('intermediate_steps', [])
-        for action, observation in steps:
-            if getattr(action, "tool", None) == "system_control":
-                tool_input = action.tool_input
-                if isinstance(tool_input, dict):
-                    action_type = tool_input.get("action_type", "NAVIGATE")
-                    target = tool_input.get("target_page", "dashboard")
-                else:
-                    try:
-                        parsed = json.loads(tool_input)
-                        action_type = parsed.get("action_type", "NAVIGATE")
-                        target = parsed.get("target_page", "dashboard")
-                    except Exception:
-                        action_type = "NAVIGATE"
-                        target = str(tool_input).strip()
-                        
-                command_payload = {
-                     "type": action_type,
-                     "target": target
-                }
-            elif "SUCCESS:PREFILL:" in str(observation):
-                obs_str = str(observation).strip()
+        # Iterate over messages in reverse to find the latest tool call or final answer
+        for msg in reversed(final_messages):
+            if msg.type == "tool" and msg.name in ["system_control", "manage_truck"]:
+                # system_control / manage_truck returned a direct dict or stringified JSON
                 try:
+                    output = msg.content
+                    if isinstance(output, str):
+                        output = json.loads(output)
+                    
+                    if isinstance(output, dict):
+                        ui_action = output.get("ui_action")
+                        if ui_action and ui_action != "ERROR":
+                            reply_text = output.get("message", "Baik, saya akan memproses permintaan Anda.")
+                            command_payload = {
+                                "type": ui_action,
+                                "target": output.get("target", "dashboard")
+                            }
+                            if "data" in output:
+                                command_payload["data"] = output.get("data")
+                            break
+                        elif ui_action == "ERROR":
+                            reply_text = output.get("message", "Terjadi kesalahan saat memproses data.")
+                            command_payload = None
+                            break
+                except Exception:
+                    pass
+            elif msg.type == "tool" and "SUCCESS:PREFILL:" in str(msg.content):
+                # Fallback for PREFILL tools
+                try:
+                    obs_str = str(msg.content).strip()
                     parts = obs_str.split(":", 3)
                     target = parts[2] if len(parts) > 2 else "dashboard"
                     json_str = parts[3].strip() if len(parts) > 3 else ""
                     payload_data = json.loads(json_str) if json_str else {}
-                        
+                    
                     command_payload = {
                         "type": "PREFILL",
                         "target": target,
                         "data": payload_data
                     }
-                except Exception as e:
-                    print(f"Error parsing PREFILL observation: {e}")
-                    command_payload = None
-            
-            if command_payload:
-                break
-                
+                    reply_text = "Baik, saya akan menyiapkan data yang Anda minta."
+                    break
+                except Exception:
+                    pass
+            elif msg.type == "ai" and msg.content and not command_payload:
+                # Store the last AI message as the reply text, unless we already found a tool command
+                if not reply_text:
+                    reply_text = msg.content
+
         if not reply_text and command_payload:
             reply_text = "Baik, saya akan mengarahkan Anda ke halaman yang relevan."
 
