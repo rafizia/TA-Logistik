@@ -56,7 +56,7 @@ export default function AIChatbox({ onClose }) {
         },
         body: JSON.stringify({ 
           query: userText,
-          history: messages 
+          history: messages.filter((msg, index) => !(index === 0 && msg.text === 'Halo! Ada yang bisa saya bantu?'))
         }),
       });
 
@@ -181,7 +181,7 @@ export default function AIChatbox({ onClose }) {
         }
 
         const routeMap = {
-          'shipments_list': '/shipment',
+          'shipments_list': '/pengiriman',
           'add_shipment': '/shipment/tambah',
           'edit_shipment': '/shipment/edit',
           'trucks_list': '/truk',

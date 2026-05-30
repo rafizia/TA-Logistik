@@ -10,7 +10,12 @@ from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_core.prompts import PromptTemplate
 from prompt_template import AGENT_TEMPLATE
 from tools import use_tools
-from langchain.agents import create_agent
+from langchain.agents import create_agent, AgentState
+from langchain.agents.middleware import before_model
+from langchain.messages import RemoveMessage
+from typing import Any
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
+from langgraph.checkpoint.memory import InMemorySaver
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
@@ -49,11 +54,32 @@ PROMPT = PromptTemplate(
 
 all_tools = tools + toolkit.get_tools()
 sys_prompt = AGENT_TEMPLATE
+memory = InMemorySaver()
+
+@before_model
+def trim_messages(state: AgentState, runtime: Any) -> dict | None:
+    """Keep only the last few messages to fit context window safely."""
+    messages = state.get("messages", [])
+    if len(messages) <= 6:
+        return None
+
+    first_msg = messages[0]
+    recent_messages = messages[-5:] if len(messages) % 2 == 0 else messages[-6:]
+    new_messages = [first_msg] + recent_messages
+
+    return {
+        "messages": [
+            RemoveMessage(id=REMOVE_ALL_MESSAGES),
+            *new_messages
+        ]
+    }
 
 agent = create_agent(
     model=llm,
     tools=all_tools,
     system_prompt=sys_prompt,
+    middleware=[trim_messages],
+    checkpointer=memory,
     debug=True
 )
 
@@ -71,21 +97,18 @@ agent_executor = AgentExecutor(
 
 class ChatRequest(BaseModel):
     query: str
-    history: list = []
+    session_id: str = "default_session"
 
 @app.post("/chat")
 async def chat_with_ai(request: ChatRequest):
     try:
-        # Format history into messages
-        messages = []
-        for msg in request.history:
-            role = "user" if msg.get("sender") == "user" else "assistant"
-            messages.append({"role": role, "content": msg.get("text")})
-            
-        messages.append({"role": "user", "content": request.query})
+        input_messages = [{"role": "user", "content": request.query}]
+        config = {"configurable": {"thread_id": request.session_id}}
 
-        # create_agent
-        response = await agent.ainvoke({"messages": messages})
+        response = await agent.ainvoke(
+            {"messages": input_messages}, 
+            config=config
+        )
         
         final_messages = response.get("messages", [])     
         reply_text = ""
