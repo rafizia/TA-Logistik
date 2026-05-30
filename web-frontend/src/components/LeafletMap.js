@@ -89,7 +89,7 @@ function LeafletMap({
 
       {/* Markers */}
       {markers.map((marker, idx) => {
-        let icon;
+        let icon = new L.Icon.Default();
         if (marker.color === 'green') {
           icon = greenIcon;
         } else if (marker.label != null) {

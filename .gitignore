@@ -229,3 +229,9 @@ opt-algorithm/db.sqlite3
 
 # logs
 logs
+csv
+experiment
+experiment-old
+
+# check do status
+api-gateway/check-do-status.js

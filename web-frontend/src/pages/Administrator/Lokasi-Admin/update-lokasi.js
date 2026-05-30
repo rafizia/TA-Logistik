@@ -30,6 +30,7 @@ function UpdateLokasiAdmin() {
 
   const [updateLokasiData, setUpdateLokasiData] = useState({
     id: idLokasi,
+    name: null,
     latitude: null,
     longitude: null,
     address: null,
@@ -86,20 +87,23 @@ function UpdateLokasiAdmin() {
         const oHour = `${pad(oDate.getUTCHours())}:${pad(oDate.getUTCMinutes())}`;
         const cHour = `${pad(cDate.getUTCHours())}:${pad(cDate.getUTCMinutes())}`;
 
+        const prefill = state?.prefill || {};
+
         setUpdateLokasiData({
           id: idLokasi,
-          latitude: loc.latitude,
-          longitude: loc.longitude,
-          address: loc.address,
-          provinsi: loc.provinsi,
-          kabupaten_kota: loc.kabupaten_kota,
-          kecamatan: loc.kecamatan,
-          desa_kelurahan: loc.desa_kelurahan,
-          kode_pos: loc.kode_pos,
-          open_hour: oHour,
-          close_hour: cHour,
-          customer_id: loc.customer_id,
-          dc_id: loc.dc_id
+          name: prefill.name !== undefined ? prefill.name : loc.name,
+          latitude: prefill.latitude !== undefined ? prefill.latitude : loc.latitude,
+          longitude: prefill.longitude !== undefined ? prefill.longitude : loc.longitude,
+          address: prefill.address !== undefined ? prefill.address : loc.address,
+          provinsi: prefill.provinsi !== undefined ? prefill.provinsi : loc.provinsi,
+          kabupaten_kota: prefill.kabupaten_kota !== undefined ? prefill.kabupaten_kota : loc.kabupaten_kota,
+          kecamatan: prefill.kecamatan !== undefined ? prefill.kecamatan : loc.kecamatan,
+          desa_kelurahan: prefill.desa_kelurahan !== undefined ? prefill.desa_kelurahan : loc.desa_kelurahan,
+          kode_pos: prefill.kode_pos !== undefined ? prefill.kode_pos : loc.kode_pos,
+          open_hour: prefill.open_hour !== undefined ? prefill.open_hour : oHour,
+          close_hour: prefill.close_hour !== undefined ? prefill.close_hour : cHour,
+          customer_id: prefill.customer_id !== undefined ? prefill.customer_id : loc.customer_id,
+          dc_id: prefill.dc_id !== undefined ? prefill.dc_id : loc.dc_id
         })
 
         if (loc.customer) {
@@ -134,6 +138,7 @@ function UpdateLokasiAdmin() {
 
   const handleSubmit = () => {
     if (
+      updateLokasiData.name === null ||
       updateLokasiData.address === null ||
       updateLokasiData.provinsi === null ||
       updateLokasiData.kabupaten_kota === null ||
@@ -191,6 +196,8 @@ function UpdateLokasiAdmin() {
           <h4>Masukan Data Lokasi</h4>
           <div className="pt-4 space-y-4">
             
+            <TextField label="Nama Lokasi" placeholder="Toko ABC..." required={true} className="w-full" value={updateLokasiData.name || ""} onChange={(e) => handleInputChange('name', e.target.value)} isError={isError && checkAttributeNull(updateLokasiData.name)} />
+
             <TextField label="Alamat Lokasi" placeholder="Jl. Raya..." required={true} className="w-full" value={updateLokasiData.address || ""} onChange={(e) => handleInputChange('address', e.target.value)} isError={isError && checkAttributeNull(updateLokasiData.address)} />
 
             <div className="flex gap-4">

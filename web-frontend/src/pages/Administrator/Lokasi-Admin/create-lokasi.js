@@ -58,6 +58,7 @@ function CreateLokasiAdmin() {
 
       let updatedData = { ...newLokasiData }
 
+      if (stateData.name) updatedData.name = stateData.name
       if (stateData.address) updatedData.address = stateData.address
       if (stateData.provinsi) updatedData.provinsi = stateData.provinsi
       if (stateData.kabupaten_kota) updatedData.kabupaten_kota = stateData.kabupaten_kota
@@ -99,6 +100,7 @@ function CreateLokasiAdmin() {
   const [dcDropdown, setDCDropdown] = useState(null)
 
   const [newLokasiData, setNewLokasiData] = useState({
+    name: null,
     latitude: null,
     longitude: null,
     address: null,
@@ -135,6 +137,7 @@ function CreateLokasiAdmin() {
 
   const handleSubmit = () => {
     if (
+      newLokasiData.name === null ||
       newLokasiData.address === null ||
       newLokasiData.provinsi === null ||
       newLokasiData.kabupaten_kota === null ||
@@ -192,6 +195,8 @@ function CreateLokasiAdmin() {
         <div className="p-8 bg-white rounded-lg">
           <h4>Masukan Data Lokasi</h4>
           <div className="pt-4 space-y-4">
+            
+            <TextField label="Nama Lokasi" placeholder="Toko ABC..." required={true} className="w-full" value={newLokasiData.name || ""} onChange={(e) => handleInputChange('name', e.target.value)} isError={isError && checkAttributeNull(newLokasiData.name)} />
             
             <TextField label="Alamat Lokasi" placeholder="Jl. Raya..." required={true} className="w-full" value={newLokasiData.address || ""} onChange={(e) => handleInputChange('address', e.target.value)} isError={isError && checkAttributeNull(newLokasiData.address)} />
 

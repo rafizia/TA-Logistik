@@ -197,19 +197,20 @@ def use_tools(db):
         except Exception as e:
             return {"ui_action": "ERROR", "message": f"ERROR: {str(e)}"}
 
-    @tool
-    def manage_location(query: dict | str) -> str:
+    @tool(return_direct=True)
+    def manage_location(query: dict | str) -> dict:
         """
         Use this tool for CREATE, UPDATE, or DELETE operations on location entities.
         Input must be a JSON string with:
         - action: 'CREATE', 'UPDATE', or 'DELETE'
         - data: dictionary of location fields.
-        For CREATE: requires address, provinsi, kabupaten_kota, kecamatan, desa_kelurahan,
+        For CREATE: requires name, address, provinsi, kabupaten_kota, kecamatan, desa_kelurahan,
           kode_pos, open_hour, close_hour, customer_id, dc_id.
+          Optional fields: latitude, longitude, service_time, is_dc.
           Note: Always use `get_available_options` first to find the correct `customer_id`
           and `dc_id` from names like "PT ABC" or "DC Jakarta".
         For UPDATE/DELETE: requires id.
-        Example: {"action": "CREATE", "data": {"address": "Jl. Merdeka 1", "provinsi": "DKI Jakarta", "kabupaten_kota": "Jakarta Pusat", "kecamatan": "Gambir", "desa_kelurahan": "Gambir", "kode_pos": "10110", "open_hour": "08:00", "close_hour": "17:00", "customer_id": 1, "dc_id": 1}}
+        Example: {"action": "CREATE", "data": {"name": "Toko ABC", "address": "Jl. Merdeka 1", "provinsi": "DKI Jakarta", "kabupaten_kota": "Jakarta Pusat", "kecamatan": "Gambir", "desa_kelurahan": "Gambir", "kode_pos": "10110", "latitude": -6.123, "longitude": 106.123, "open_hour": "08:00", "close_hour": "17:00", "customer_id": 1, "dc_id": 1}}
         """
         try:
             payload = query if isinstance(query, dict) else json.loads(query)
@@ -218,35 +219,53 @@ def use_tools(db):
 
             if action == "CREATE":
                 required = [
-                    "address", "provinsi", "kabupaten_kota", "kecamatan",
+                    "name", "address", "provinsi", "kabupaten_kota", "kecamatan",
                     "desa_kelurahan", "kode_pos", "open_hour", "close_hour",
                     "customer_id", "dc_id",
                 ]
                 for field in required:
                     if field not in data:
-                        return f"ERROR: Missing required field '{field}' for CREATE."
-                return f"SUCCESS:PREFILL:add_location:{json.dumps(data)}"
+                        return {"ui_action": "ERROR", "message": f"ERROR: Missing required field '{field}' for CREATE."}
+                
+                return {
+                    "ui_action": "PREFILL",
+                    "target": "add_location",
+                    "data": data,
+                    "message": "Data lokasi telah disiapkan. Silakan periksa dan simpan di form."
+                }
 
             elif action == "UPDATE":
                 location_id = data.get("id")
                 if not location_id:
-                    return "ERROR: Missing id for UPDATE."
+                    return {"ui_action": "ERROR", "message": "ERROR: Missing id for UPDATE."}
+                
                 prefill_data = {"Id": location_id, "prefill": data}
-                return f"SUCCESS:PREFILL:edit_location:{json.dumps(prefill_data)}"
+                return {
+                    "ui_action": "PREFILL",
+                    "target": "edit_location",
+                    "data": prefill_data,
+                    "message": "Data lokasi siap diedit."
+                }
 
             elif action == "DELETE":
                 identifier = data.get("id")
                 if not identifier:
-                    return "ERROR: Missing id for DELETE."
+                    return {"ui_action": "ERROR", "message": "ERROR: Missing id for DELETE."}
+                
                 sql = text("DELETE FROM location WHERE id = :ident")
                 with db._engine.connect() as conn:
                     conn.execute(sql, {"ident": identifier})
                     conn.commit()
-                return f"SUCCESS: Location {identifier} deleted successfully."
+                
+                return {
+                    "ui_action": "NAVIGATE",
+                    "target": "locations_list",
+                    "message": f"Lokasi dengan ID {identifier} berhasil dihapus."
+                }
 
-            return "ERROR: Invalid action."
+            return {"ui_action": "ERROR", "message": "ERROR: Invalid action."}
         except Exception as e:
-            return f"ERROR: {str(e)}"
+            return {"ui_action": "ERROR", "message": f"ERROR: {str(e)}"}
 
     @tool
     def automate_shipment(query: dict | str) -> str:

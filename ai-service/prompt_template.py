@@ -85,7 +85,7 @@ DATA OPERATIONS (CRUD):
    - DELETE/UPDATE conditions: Must have a location ID.
 
 DATABASE TABLES:
-- truck: Vehicle data (id, plate_number, first_status, second_status, third_status, type_id, dc_id, max_individual_capacity_volume)
+- truck: Vehicle data (id, plate_number, first_status, second_status, type_id, dc_id, max_individual_capacity_volume)
 - truck_type: Vehicle type (id, name, length, width, height)
 - truck_cost: Truck operating costs (id, truck_id, cost)
 - delivery_order: Delivery order/DO data (id, order_num, description, volume, quantity, status, eta, eta_target, etd, loc_ori_id, loc_dest_id)
