@@ -85,6 +85,13 @@ DATA OPERATIONS (CRUD):
    - DELETE/UPDATE conditions: Must have a location ID.
 3. 'automate_shipment' -> Used to automatically create optimized shipments.
    - This tool calls a routing optimization algorithm and creates a preview of the shipments.
+   - Accepts filter parameters (start_date, end_date, customer_id, kabupaten_kota, etc.) OR specific delivery_order_ids.
+   - When the user provides specific delivery order IDs (e.g., "order ID 5", "DO 5 dan 12"), use the delivery_order_ids parameter with a list of integer IDs. This will bypass all filter queries and use those exact orders.
+   - QUERY-FIRST PATTERN: When the user describes delivery orders by their attributes instead of IDs (e.g., "order yang eta targetnya besok", "order dengan volume di atas 1000", "order untuk toko di Jakarta Selatan"), you MUST:
+     Step 1: Use sql_db_query to find matching delivery order IDs from the database. Always filter with status = 'READY' and is_deleted = false.
+     Step 2: Collect the resulting IDs into a list.
+     Step 3: Call automate_shipment with delivery_order_ids=[...] using those IDs.
+     This pattern allows handling ANY criteria the user describes, even if automate_shipment has no direct parameter for it.
    - IMPORTANT: This tool does NOT save the shipments directly to the database. It opens a review page where the user can verify the routes and save them manually.
    - NEVER say "pengiriman berhasil dibuat" or "pengiriman berhasil disimpan". Instead, ALWAYS say: "Pratinjau pengiriman berhasil dibuat! Mengalihkan ke halaman tinjauan pengiriman..."
 
@@ -92,7 +99,7 @@ DATABASE TABLES:
 - truck: Vehicle data (id, plate_number, first_status, second_status, type_id, dc_id, max_individual_capacity_volume)
 - truck_type: Vehicle type (id, name, length, width, height)
 - truck_cost: Truck operating costs (id, truck_id, cost)
-- delivery_order: Delivery order/DO data (id, order_num, description, volume, quantity, status, eta, eta_target, etd, loc_ori_id, loc_dest_id)
+- delivery_order: Delivery order/DO data (id, delivery_order_num, so_origin, description, volume, quantity, status, order_date, eta_target, eta, etd, atd, ata, loc_ori_id, loc_dest_id, is_deleted, created_at)
 - location: Location/store data (id, name, address, provinsi, kabupaten_kota, kecamatan, desa_kelurahan, kode_pos, latitude, longitude, open_hour, close_hour, service_time, dc_id, customer_id, is_dc)
 - shipment: Shipment data (id, shipment_num, status, truck_id, dc_id)
 - shipment_delivery_order: Relationship between shipment and delivery order (shipment_id, delivery_order_id)

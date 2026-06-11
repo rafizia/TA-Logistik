@@ -67,8 +67,40 @@ Thought: Pengguna ingin mengubah status truk. Saya menggunakan manage_truck deng
 Action: manage_truck(query={"action": "UPDATE", "data": {"plate_number": "B 5678 CD", "first_status": "UNAVAILABLE"}})
 Result: {"ui_action": "PREFILL", "target": "bulk_edit_truck", "data": [...], "message": "Data truk siap diedit."}
 
+---
+[Example 8: Shipping Automation with Specific Delivery Order IDs]
+User: "Buatkan shipment untuk order ID 5 dan 12 dengan optimasi jarak."
+Thought: Pengguna ingin membuat pengiriman otomatis untuk delivery order ID spesifik (5 dan 12) dengan optimasi jarak. Saya bisa langsung menggunakan parameter delivery_order_ids tanpa perlu mencari filter lain.
+Action: automate_shipment(optimization_type="distance", delivery_order_ids=[5, 12])
+Result: {"ui_action": "PREFILL", "target": "automate_shipment", "data": {...}, "message": "Memulai proses pembuatan rute pengiriman otomatis..."}
+
+---
+[Example 9: Query-First Pattern - Shipment by ETA Target]
+User: "Buat shipment untuk order yang eta targetnya besok dengan optimasi emisi."
+Thought: Pengguna ingin membuat pengiriman untuk delivery order berdasarkan eta_target. Parameter ini tidak tersedia langsung di automate_shipment, jadi saya perlu query database dulu untuk mencari ID order yang sesuai. Tanggal besok adalah 2026-06-12.
+Action: sql_db_query(query="SELECT id FROM delivery_order WHERE eta_target::date = '2026-06-12' AND status = 'READY' AND is_deleted = false")
+Observation: [(3,), (7,), (15,)]
+Thought: Ditemukan 3 delivery order dengan eta_target besok: ID 3, 7, dan 15. Sekarang saya gunakan delivery_order_ids untuk membuat shipment.
+Action: automate_shipment(optimization_type="emission", delivery_order_ids=[3, 7, 15])
+Result: {"ui_action": "PREFILL", "target": "automate_shipment", "data": {...}, "message": "Memulai proses pembuatan rute pengiriman otomatis..."}
+Final Answer: Pratinjau pengiriman berhasil dibuat! Mengalihkan ke halaman tinjauan pengiriman...
+
+---
+[Example 10: Query-First Pattern - Shipment by Destination Attribute]
+User: "Buatkan pengiriman untuk semua order yang tujuannya di Bandung, pakai optimasi jarak."
+Thought: Pengguna ingin membuat pengiriman berdasarkan lokasi tujuan. Saya perlu query database dengan JOIN ke tabel location untuk mencari delivery order yang tujuannya di Bandung.
+Action: sql_db_query(query="SELECT del_ord.id FROM delivery_order del_ord JOIN location loc ON del_ord.loc_dest_id = CAST(loc.id AS TEXT) WHERE loc.kabupaten_kota ILIKE '%Bandung%' AND del_ord.status = 'READY' AND del_ord.is_deleted = false")
+Observation: [(8,), (22,)]
+Thought: Ditemukan 2 delivery order dengan tujuan Bandung: ID 8 dan 22. Sekarang saya gunakan delivery_order_ids.
+Action: automate_shipment(optimization_type="distance", delivery_order_ids=[8, 22])
+Result: {"ui_action": "PREFILL", "target": "automate_shipment", "data": {...}, "message": "Memulai proses pembuatan rute pengiriman otomatis..."}
+Final Answer: Pratinjau pengiriman berhasil dibuat! Mengalihkan ke halaman tinjauan pengiriman...
+
 === END OF EXAMPLE ===
 
-IMPORTANT: Always follow the pattern above. If the user specifies a name (not an ID), ALWAYS call get_available_options first to get the correct ID before calling any other tools."""
+IMPORTANT: Always follow the pattern above. If the user specifies a name (not an ID), ALWAYS call get_available_options first to get the correct ID before calling any other tools.
+IMPORTANT: When the user provides specific delivery order IDs (e.g., "order ID 5", "DO ID 5 dan 12"), use the delivery_order_ids parameter directly. Do NOT use other filters when specific IDs are given.
+IMPORTANT: When the user describes delivery orders by attributes (e.g., eta_target, volume, destination city), use the QUERY-FIRST pattern: first query the database with sql_db_query to find matching IDs, then pass them to automate_shipment via delivery_order_ids. Always include status = 'READY' AND is_deleted = false in your WHERE clause."""
 
 AGENT_TEMPLATE_FEWSHOT = AGENT_TEMPLATE + FEW_SHOT_EXAMPLES
+

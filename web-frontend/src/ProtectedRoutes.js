@@ -15,7 +15,7 @@ import PrivateRoute from './utils/private-route';
 import ViewAllCostumerAdmin from './pages/Administrator/Costumer-Admin/viewall-customer';
 import CustomerDetailPage from './pages/Administrator/Costumer-Admin/detail-costumer';
 import { DODetailPageAdmin, ViewAllDOAdmin } from './pages/Administrator/DeliveryOrder-Admin';
-import { ViewAllDo, DODetailPage } from './pages/DeliveryOrder';
+import { ViewAllDo, DODetailPage, CreateDO, EditDO } from './pages/DeliveryOrder';
 import ViewAllShipment from './pages/Administrator/Shipment-Admin/viewall-shipment';
 import DoSelectAutomateAdmin from './pages/Administrator/Shipment-Admin/otomatisasi-select';
 import { ViewShipments } from './pages/Shipment';
@@ -97,7 +97,9 @@ function ProtectedRoutes() {
           <Route path="/lokasi/buat" element={<PrivateRoute><Sidebar lokasi={true} title="Buat Lokasi"><CreateLokasiAdmin /></Sidebar></PrivateRoute>} />
           <Route path="/lokasi/update" element={<PrivateRoute><Sidebar lokasi={true} title="Ubah Lokasi"><UpdateLokasiAdmin /></Sidebar></PrivateRoute>} />
           <Route path="/lokasi/:lokasiId" element={<PrivateRoute><Sidebar lokasi={true} title="Detail Lokasi"><ViewLocation /></Sidebar></PrivateRoute>} />
-          <Route path="/delivery-order" element={<PrivateRoute><Sidebar deliveryOrder={true} title="Delivery Order"><ViewAllDo /></Sidebar></PrivateRoute>} />
+          <Route path="/delivery-order" element={<PrivateRoute><Sidebar deliveryOrder={true} title="Daftar Delivery Order"><ViewAllDo /></Sidebar></PrivateRoute>} />
+          <Route path="/delivery-orders/create" element={<PrivateRoute><Sidebar deliveryOrder={true} title="Buat Order"><CreateDO /></Sidebar></PrivateRoute>} />
+          <Route path="/delivery-orders/edit/:doId" element={<PrivateRoute><Sidebar deliveryOrder={true} title="Ubah Order"><EditDO /></Sidebar></PrivateRoute>} />
           <Route path="/delivery-order/:doId" element={<PrivateRoute><Sidebar deliveryOrder={true} title="Delivery Order"><DODetailPage /></Sidebar></PrivateRoute>} />
           <Route path="/product" element={<PrivateRoute><Sidebar product={true} title="Daftar Product"><ViewAllProduk /></Sidebar></PrivateRoute>} />
           <Route path="/pengiriman" element={<PrivateRoute><Sidebar pengiriman={true} title="Pengiriman"><ViewShipments /></Sidebar></PrivateRoute>} />

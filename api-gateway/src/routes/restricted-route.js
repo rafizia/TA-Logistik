@@ -5,6 +5,8 @@ import {
   getAllDOAdminController,
   getAllDOController,
   getDOByIDController,
+  createDOController,
+  updateDOController,
 } from "../controllers/delivery-order-controller.js"; //DO
 import {
   getAllLocationsAdminController,
@@ -311,6 +313,22 @@ restrictedRouter.get("/api/v1/delivery-orders", getAllDOController);
 
 /**
  * @swagger
+ * /api/v1/delivery-orders:
+ *   post:
+ *     summary: Create a new delivery order
+ *     tags: [Delivery Order]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       201:
+ *         description: Delivery Order Created
+ *       401:
+ *         description: Unauthorized
+ */
+restrictedRouter.post("/api/v1/delivery-orders", createDOController);
+
+/**
+ * @swagger
  * /api/v1/delivery-order/{doId}:
  *   get:
  *     summary: Get delivery order by ID
@@ -331,6 +349,7 @@ restrictedRouter.get("/api/v1/delivery-orders", getAllDOController);
  *         description: Delivery order not found
  */
 restrictedRouter.get("/api/v1/delivery-order/:doId", getDOByIDController);
+restrictedRouter.put("/api/v1/delivery-orders/:doId", updateDOController);
 
 //locations
 /**

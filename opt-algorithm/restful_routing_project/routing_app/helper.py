@@ -126,49 +126,19 @@ def get_distance_time_matrices(locations, batch_size=10, priority='time'):
             dists_km = dists / 1000
             times = (dists_km / average_speed) * 3600
             
-            # Calculate emissions using Airflow/MinIO ONLY if priority is 'emission'
+            # Calculate emissions using dummy values if priority is 'emission'
             emissions = np.zeros(dists.shape)
             if priority == 'emission':
-                logger.info(f"[Emission] Priority is 'emission', calculating emission matrix via Airflow")
-                # Note: This is N^2 and will be slow.
+                logger.info(f"[Emission] Priority is 'emission', calculating dummy emission matrix")
                 for r in range(len(origin_coords)):
                     for c in range(len(destination_coords)):
-                        origin_str = f"{origin_coords[r][0]},{origin_coords[r][1]}"
-                        dest_str = f"{destination_coords[c][0]},{destination_coords[c][1]}"
-                        
-                        if origin_str == dest_str:
+                        distance_meters = dists[r][c]
+                        if distance_meters == 0:
                             continue
-
-                        log_external_call(logger, "Airflow", "trigger_inference", {"origin": origin_str, "dest": dest_str})
-                        dag_run_id = trigger_inference(origin_str, dest_str)
                         
-                        if dag_run_id:
-                            logger.info(f"[Emission] DAG run triggered: {dag_run_id}")
-                            status = poll_dag_run(dag_run_id)
-                            if status == 'success':
-                                result = get_inference_result(dag_run_id)
-                                # New JSON structure:
-                                # {
-                                #   "Emission Rate": {
-                                #     "CO(g)": ..., "HC(g)": ..., "NOx(g)": ...,
-                                #     "PM2.5_Ele(g)": ..., "PM2.5_Org(g)": ...,
-                                #     "Energy(KJ)": ..., "CO2(g)": ..., "Fuel(g)": ..., "TT(s)": ...
-                                #   },
-                                #   "Emission Factor": { ... }
-                                # }
-                                if result and 'Emission Rate' in result:
-                                    emission_rate = result['Emission Rate']
-                                    # Use CO2 as the primary emission metric (in grams)
-                                    # You can also create a weighted sum of multiple pollutants if needed
-                                    co2_emission = float(emission_rate.get('CO2(g)', 0))
-                                    emissions[r][c] = co2_emission
-                                    logger.info(f"[Emission] Retrieved CO2 emission: {co2_emission}g for {origin_str} -> {dest_str}")
-                                else:
-                                    logger.warning(f"[Emission] Result missing 'Emission Rate': {result}")
-                            else:
-                                logger.warning(f"[Emission] DAG run failed or timed out: {status}")
-                        else:
-                            logger.error("[Emission] Failed to trigger DAG")
+                        # Dummy emission: ~1200 grams of CO2 per km
+                        co2_emission = (distance_meters / 1000.0) * 1200.0
+                        emissions[r][c] = co2_emission
             else:
                 logger.info(f"[Emission] Priority is '{priority}', skipping emission calculation (using zero matrix)")
 

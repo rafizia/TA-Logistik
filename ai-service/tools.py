@@ -276,7 +276,8 @@ def use_tools(db):
         customer_name: str = None,
         kabupaten_kota: str = None,
         so_origin: str = None,
-        delivery_order_num: str = None
+        delivery_order_num: str = None,
+        delivery_order_ids: list[int] = None
     ) -> dict:
         """
         Use this tool to automatically create a shipment with optimization based on user request.
@@ -289,6 +290,7 @@ def use_tools(db):
         - kabupaten_kota: string (optional, City/District region name, e.g. 'Jakarta Selatan')
         - so_origin: string (optional, SO document origin/number, e.g. 'SO-001')
         - delivery_order_num: string (optional, DO document number, e.g. 'PRM/#DO-0019')
+        - delivery_order_ids: list of integers (optional, specific delivery order IDs to include in the shipment, e.g. [5, 12, 20]). When provided, the system will use these exact IDs directly instead of querying by filters. Use this when the user specifies order IDs explicitly like 'buatkan shipment untuk order ID 5 dan 12'.
         """
         try:
             payload = {
@@ -299,7 +301,8 @@ def use_tools(db):
                 "customer_name": customer_name,
                 "kabupaten_kota": kabupaten_kota,
                 "so_origin": so_origin,
-                "delivery_order_num": delivery_order_num
+                "delivery_order_num": delivery_order_num,
+                "delivery_order_ids": delivery_order_ids
             }
             # Remove None values
             payload = {k: v for k, v in payload.items() if v is not None}
