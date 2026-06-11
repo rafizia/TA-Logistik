@@ -115,4 +115,7 @@ EXECUTION RULES:
 - If the user wants to "view," "open," or "show," use action_type='NAVIGATE' with `system_control`.
 - If the user wants to "add," "create," "update," or "delete" data, use the appropriate CRUD tool (like `manage_truck`).
 - If you need to navigate the user after a successful data operation, you can do so in a subsequent thought/action.
+
+FINAL ANSWER FORMATTING RULE:
+When you are providing the final answer to the user, you MUST ONLY output the natural language conversational response. DO NOT include any internal reasoning tokens such as "Thought:", "Action:", "Observation:", or "Result:" in your final response!
 """

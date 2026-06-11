@@ -45,9 +45,23 @@ export default function AIChatbox({ onClose }) {
     setIsLoading(true);
 
     try {
-      const aiBaseUrl = process.env.REACT_APP_BACKEND_URL.includes('localhost') 
-        ? 'http://localhost:8000' 
-        : process.env.REACT_APP_BACKEND_URL.replace(/\/$/, "") + '/ai/';
+      // Use specific AI URL if defined, otherwise infer from BACKEND_URL (which goes through Nginx)
+      let aiBaseUrl = process.env.REACT_APP_AI_URL;
+      if (!aiBaseUrl) {
+        const baseUrl = process.env.REACT_APP_BACKEND_URL || "";
+        if (baseUrl.includes('/api/v1')) {
+          aiBaseUrl = baseUrl.replace('/api/v1', '/ai');
+        } else if (baseUrl.includes('/api')) {
+          aiBaseUrl = baseUrl.replace('/api', '/ai');
+        } else {
+          aiBaseUrl = baseUrl.replace(/\/$/, "") + '/ai';
+        }
+      }
+      // Local
+      //const aiBaseUrl = process.env.REACT_APP_BACKEND_URL.includes('localhost') 
+      //  ? 'http://localhost:8000' 
+      //  : process.env.REACT_APP_BACKEND_URL.replace(/\/$/, "") + '/ai/';
+      
       //const aiBaseUrl = (process.env.REACT_APP_BACKEND_URL || "").replace(/\/$/, "") + '/ai/';
       const response = await fetch(`${aiBaseUrl}/chat`, {
         method: 'POST',

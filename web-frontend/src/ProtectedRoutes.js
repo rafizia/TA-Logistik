@@ -81,8 +81,8 @@ function ProtectedRoutes() {
           <Route path="/administrator/truk/buat" element={<PrivateRoute><SidebarAdmin truk={true} title="Tambah Truk"><CreateTrukAdmin /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/truk/update" element={<PrivateRoute><SidebarAdmin truk={true} title="Ubah Truk"><UpdateTrukAdmin /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/truk/import" element={<PrivateRoute><SidebarAdmin truk={true} title="Unggah Data Truk"><ImportTruk /></SidebarAdmin></PrivateRoute>} />
-          <Route path="/administrator/truk/bulk-buat" element={<PrivateRoute><SidebarAdmin truk={true} title="Buat Massal Truk"><BulkCreateTruk /></SidebarAdmin></PrivateRoute>} />
-          <Route path="/administrator/truk/bulk-ubah" element={<PrivateRoute><SidebarAdmin truk={true} title="Perbarui Massal Truk"><BulkUpdateTruk /></SidebarAdmin></PrivateRoute>} />
+          <Route path="/administrator/truk/bulk-buat" element={<PrivateRoute><SidebarAdmin truk={true} title="Buat Truk"><BulkCreateTruk /></SidebarAdmin></PrivateRoute>} />
+          <Route path="/administrator/truk/bulk-ubah" element={<PrivateRoute><SidebarAdmin truk={true} title="Perbarui Truk"><BulkUpdateTruk /></SidebarAdmin></PrivateRoute>} />
         </>
       ) : (
         <>
@@ -91,8 +91,8 @@ function ProtectedRoutes() {
           <Route path="/truk" element={<PrivateRoute><Sidebar truk={true} title="Daftar Truk"><ViewAllTrucks /></Sidebar></PrivateRoute>} />
           <Route path="/truk/update" element={<PrivateRoute><Sidebar truk={true} title="Ubah Truk"><UpdateTrukAdmin /></Sidebar></PrivateRoute>} />
           <Route path="/truk/import" element={<PrivateRoute><Sidebar truk={true} title="Unggah Data Truk"><ImportTruk /></Sidebar></PrivateRoute>} />
-          <Route path="/truk/bulk-buat" element={<PrivateRoute><Sidebar truk={true} title="Buat Massal Truk"><BulkCreateTruk /></Sidebar></PrivateRoute>} />
-          <Route path="/truk/bulk-ubah" element={<PrivateRoute><Sidebar truk={true} title="Perbarui Massal Truk"><BulkUpdateTruk /></Sidebar></PrivateRoute>} />
+          <Route path="/truk/bulk-buat" element={<PrivateRoute><Sidebar truk={true} title="Buat Truk"><BulkCreateTruk /></Sidebar></PrivateRoute>} />
+          <Route path="/truk/bulk-ubah" element={<PrivateRoute><Sidebar truk={true} title="Perbarui Truk"><BulkUpdateTruk /></Sidebar></PrivateRoute>} />
           <Route path="/lokasi" element={<PrivateRoute><Sidebar lokasi={true} title="Daftar Lokasi"><ViewAllLokasi /></Sidebar></PrivateRoute>} />
           <Route path="/lokasi/buat" element={<PrivateRoute><Sidebar lokasi={true} title="Buat Lokasi"><CreateLokasiAdmin /></Sidebar></PrivateRoute>} />
           <Route path="/lokasi/update" element={<PrivateRoute><Sidebar lokasi={true} title="Ubah Lokasi"><UpdateLokasiAdmin /></Sidebar></PrivateRoute>} />

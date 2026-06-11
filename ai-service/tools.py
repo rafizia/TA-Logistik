@@ -25,7 +25,7 @@ def use_tools(db):
     Parameter db: instance SQLDatabase dari main.py.
     """
 
-    @tool(return_direct=True)
+    @tool
     def system_control(action_type: str = "NAVIGATE", target_page: str = "dashboard") -> dict:
         """
         VERY IMPORTANT: Use this tool for navigation or system actions.
@@ -72,7 +72,7 @@ def use_tools(db):
         except Exception as e:
             return f"Error fetching options: {str(e)}"
 
-    @tool(return_direct=True)
+    @tool
     def manage_truck(query: dict | str) -> dict:
         """
         Use this tool for CREATE, UPDATE, or DELETE operations on truck entities.
@@ -197,7 +197,7 @@ def use_tools(db):
         except Exception as e:
             return {"ui_action": "ERROR", "message": f"ERROR: {str(e)}"}
 
-    @tool(return_direct=True)
+    @tool
     def manage_location(query: dict | str) -> dict:
         """
         Use this tool for CREATE, UPDATE, or DELETE operations on location entities.
@@ -267,7 +267,7 @@ def use_tools(db):
         except Exception as e:
             return {"ui_action": "ERROR", "message": f"ERROR: {str(e)}"}
 
-    @tool(return_direct=True)
+    @tool
     def automate_shipment(
         optimization_type: str,
         start_date: str = None,

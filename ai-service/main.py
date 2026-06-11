@@ -9,6 +9,7 @@ from langchain_community.utilities.sql_database import SQLDatabase
 from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_core.prompts import PromptTemplate
 from prompt_template import AGENT_TEMPLATE
+from prompt_template_fewshot import AGENT_TEMPLATE_FEWSHOT
 from tools import use_tools
 from langchain.agents import create_agent, AgentState
 from langchain.agents.middleware import before_model
@@ -53,7 +54,7 @@ PROMPT = PromptTemplate(
 )
 
 all_tools = tools + toolkit.get_tools()
-sys_prompt = AGENT_TEMPLATE
+sys_prompt = AGENT_TEMPLATE_FEWSHOT
 memory = InMemorySaver()
 
 @before_model
@@ -80,20 +81,8 @@ agent = create_agent(
     system_prompt=sys_prompt,
     middleware=[trim_messages],
     checkpointer=memory,
-    debug=True
+    #debug=True
 )
-
-'''
-agent_executor = AgentExecutor(
-    agent=agent,
-    tools=all_tools,
-    verbose=True,
-    max_iterations=30,
-    max_execution_time=120,
-    early_stopping_method="force",
-    handle_parsing_errors=True,
-    return_intermediate_steps=True
-)'''
 
 class ChatRequest(BaseModel):
     query: str
@@ -121,12 +110,17 @@ async def chat_with_ai(request: ChatRequest):
                 try:
                     output = msg.content
                     if isinstance(output, str):
-                        output = json.loads(output)
+                        import ast
+                        try:
+                            output = json.loads(output)
+                        except json.JSONDecodeError:
+                            output = ast.literal_eval(output)
                     
                     if isinstance(output, dict):
                         ui_action = output.get("ui_action")
                         if ui_action and ui_action != "ERROR":
-                            reply_text = output.get("message", "Baik, saya akan memproses permintaan Anda.")
+                            if not reply_text:
+                                reply_text = output.get("message", "Baik, saya akan memproses permintaan Anda.")
                             command_payload = {
                                 "type": ui_action,
                                 "target": output.get("target", "dashboard")
@@ -135,7 +129,8 @@ async def chat_with_ai(request: ChatRequest):
                                 command_payload["data"] = output.get("data")
                             break
                         elif ui_action == "ERROR":
-                            reply_text = output.get("message", "Terjadi kesalahan saat memproses data.")
+                            if not reply_text:
+                                reply_text = output.get("message", "Terjadi kesalahan saat memproses data.")
                             command_payload = None
                             break
                 except Exception:
