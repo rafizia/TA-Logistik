@@ -120,13 +120,11 @@ export function BaseTablePagination({ columns, data, currentPage, totalPages, pa
 
                                     {/* Tombol Detail, dikontrol HANYA oleh `showView` */}
                                     {showView && (
-                                        <button
-                                            className="flex items-center px-2 py-1 bg-gray-500 text-white rounded-md text-xs hover:bg-gray-600 transition-colors mr-2"
-                                            onClick={() => onViewDetail(row.id)}
+                                        <BsEye
+                                            className="cursor-pointer text-gray-500 hover:text-blue-500 mr-2"
                                             title="View Detail"
-                                        >
-                                            Detail
-                                        </button>
+                                            onClick={() => onViewDetail(row.id)}
+                                        />
                                     )}
 
                                     {/* Tombol Edit */}

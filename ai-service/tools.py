@@ -79,12 +79,13 @@ def use_tools(db):
         Input must be a JSON string with:
         - action: 'CREATE', 'UPDATE', or 'DELETE'
         - data: dictionary of truck fields (for UPDATE/DELETE), or LIST of truck dicts (for CREATE).
-        For CREATE: data must be a LIST of truck objects. Requires plate_number, type_id, dc_id, max_individual_capacity_volume, first_status
+        For CREATE: data must be a LIST of truck objects. Requires plate_number, type_id (or type_name), dc_id (or dc_name), max_individual_capacity_volume, first_status
           Use this when user wants to create one or more trucks.
+          You can provide 'type_name' instead of 'type_id', and 'dc_name' instead of 'dc_id'.
           IMPORTANT: plate_number MUST follow Indonesian license plate format:
           [1-2 letter area code] [1-4 digit registration number] [1-3 letter series code]
           Each part separated by a SINGLE SPACE. Example: "B 1234 RFS", "AB 12 CD".
-          Example: {"action": "CREATE", "data": [{"plate_number": "B 1234 AB", "type_id": 1, "dc_id": 1, "max_individual_capacity_volume": 1500000, "first_status": "AVAILABLE"}, {"plate_number": "B 5678 CD", "type_id": 1, "dc_id": 1, "max_individual_capacity_volume": 1000000, "first_status": "AVAILABLE"}]}
+          Example: {"action": "CREATE", "data": [{"plate_number": "B 1234 AB", "type_name": "Blind Van", "dc_name": "DC Jakarta", "max_individual_capacity_volume": 1500000, "first_status": "AVAILABLE"}]}
         For UPDATE/DELETE: requires plate_number or id.
         """
         try:
@@ -92,9 +93,41 @@ def use_tools(db):
             action  = payload.get("action", "").upper()
             data    = payload.get("data", {})
 
+            def resolve_truck_names(items):
+                resolve_errors = []
+                try:
+                    import ast
+                    types_str = db.run("SELECT id, name FROM truck_type")
+                    dcs_str = db.run("SELECT id, name FROM dc")
+                    types_list = ast.literal_eval(types_str)
+                    dcs_list = ast.literal_eval(dcs_str)
+                    type_map = {str(name).lower(): tid for tid, name in types_list}
+                    dc_map = {str(name).lower(): did for did, name in dcs_list}
+                    
+                    for idx, truck in enumerate(items):
+                        if "type_id" not in truck and "type_name" in truck:
+                            t_name = str(truck["type_name"]).lower()
+                            if t_name in type_map:
+                                truck["type_id"] = type_map[t_name]
+                            else:
+                                resolve_errors.append(f"Truk #{idx+1}: Tipe truk '{truck['type_name']}' tidak ditemukan. Opsi: {', '.join([n for _, n in types_list])}")
+                        if "dc_id" not in truck and "dc_name" in truck:
+                            d_name = str(truck["dc_name"]).lower()
+                            if d_name in dc_map:
+                                truck["dc_id"] = dc_map[d_name]
+                            else:
+                                resolve_errors.append(f"Truk #{idx+1}: DC '{truck['dc_name']}' tidak ditemukan. Opsi: {', '.join([n for _, n in dcs_list])}")
+                except Exception as e:
+                    pass
+                return resolve_errors
+
             if action == "CREATE":
                 if not isinstance(data, list) or len(data) == 0:
                     return {"ui_action": "ERROR", "message": "ERROR: For CREATE, 'data' must be a non-empty list of truck objects."}
+
+                r_errors = resolve_truck_names(data)
+                if r_errors:
+                    return {"ui_action": "ERROR", "message": "ERROR: Gagal memproses data:\n" + "\n".join(r_errors)}
 
                 required_fields = ["plate_number", "type_id", "dc_id", "max_individual_capacity_volume", "first_status"]
                 validated_trucks = []
@@ -135,6 +168,10 @@ def use_tools(db):
                 
                 if not data:
                     return {"ui_action": "ERROR", "message": "ERROR: For UPDATE, 'data' must be a non-empty list of truck objects."}
+
+                r_errors = resolve_truck_names(data)
+                if r_errors:
+                    return {"ui_action": "ERROR", "message": "ERROR: Gagal memproses data:\n" + "\n".join(r_errors)}
 
                 validated_trucks = []
                 errors = []
@@ -276,7 +313,8 @@ def use_tools(db):
         customer_name: str = None,
         kabupaten_kota: str = None,
         so_origin: str = None,
-        delivery_order_num: str = None
+        delivery_order_num: str = None,
+        delivery_order_ids: list[int] = None
     ) -> dict:
         """
         Use this tool to automatically create a shipment with optimization based on user request.
@@ -289,6 +327,7 @@ def use_tools(db):
         - kabupaten_kota: string (optional, City/District region name, e.g. 'Jakarta Selatan')
         - so_origin: string (optional, SO document origin/number, e.g. 'SO-001')
         - delivery_order_num: string (optional, DO document number, e.g. 'PRM/#DO-0019')
+        - delivery_order_ids: list of integers (optional, specific delivery order IDs to include in the shipment, e.g. [5, 12, 20]). When provided, the system will use these exact IDs directly instead of querying by filters. Use this when the user specifies order IDs explicitly like 'buatkan shipment untuk order ID 5 dan 12'.
         """
         try:
             payload = {
@@ -299,7 +338,8 @@ def use_tools(db):
                 "customer_name": customer_name,
                 "kabupaten_kota": kabupaten_kota,
                 "so_origin": so_origin,
-                "delivery_order_num": delivery_order_num
+                "delivery_order_num": delivery_order_num,
+                "delivery_order_ids": delivery_order_ids
             }
             # Remove None values
             payload = {k: v for k, v in payload.items() if v is not None}
@@ -327,4 +367,76 @@ def use_tools(db):
         except Exception as e:
             return {"ui_action": "ERROR", "message": f"ERROR: {str(e)}"}
 
-    return [system_control, get_available_options, manage_truck, manage_location, automate_shipment]
+
+    @tool
+    def manage_delivery_order(query: dict | str) -> dict:
+        """
+        Use this tool to CREATE a new delivery order.
+        Input must be a JSON string with:
+        - action: 'CREATE'
+        - data: dictionary of delivery order fields.
+        For CREATE: requires so_origin, delivery_order_num, eta_target, status, dc_id, customer_id.
+          Optional: description, product_lines (list of products to load).
+          - eta_target must be in ISO 8601 format: 'YYYY-MM-DDTHH:MM:SS' or 'YYYY-MM-DD'.
+          - status must be one of: READY, PENDING, RUNNING, DONE, IN_CALCULATION.
+          - dc_id: integer ID of the Distribution Center (use get_available_options to resolve from name).
+          - customer_id: integer ID of the customer/tujuan (use get_available_options to resolve from name).
+          - product_lines: optional list of products, each with fields:
+              product_id (int), quantity (float), volume (float), weight (float), price (float)
+              Use sql_db_query to find product IDs by name if user provides product names.
+        ALWAYS call get_available_options FIRST to resolve dc_id and customer_id from names.
+        IMPORTANT: This tool does NOT save to the database. It opens the create delivery order form with pre-filled data.
+        Example:
+          {"action": "CREATE", "data": {"so_origin": "SO-001", "delivery_order_num": "DO-001",
+           "eta_target": "2026-06-13T08:00:00", "status": "READY", "dc_id": 1, "customer_id": 2,
+           "product_lines": [{"product_id": 3, "quantity": 10, "volume": 5.0, "weight": 100.0, "price": 50000.0}]}}
+        """
+        try:
+            payload = query if isinstance(query, dict) else json.loads(query)
+            action  = payload.get("action", "").upper()
+            data    = payload.get("data", {})
+
+            if action == "CREATE":
+                required = ["so_origin", "delivery_order_num", "eta_target", "status", "dc_id", "customer_id"]
+                missing = [f for f in required if f not in data]
+                if missing:
+                    return {"ui_action": "ERROR", "message": f"ERROR: Field wajib tidak lengkap: {', '.join(missing)}. Mohon tanyakan ke pengguna."}
+
+                valid_statuses = ["READY", "PENDING", "RUNNING", "DONE", "IN_CALCULATION"]
+                if data.get("status", "").upper() not in valid_statuses:
+                    return {"ui_action": "ERROR", "message": f"ERROR: Status '{data.get('status')}' tidak valid. Pilih salah satu dari: {', '.join(valid_statuses)}"}
+
+                prefill_data = {
+                    "so_origin": data["so_origin"],
+                    "delivery_order_num": data["delivery_order_num"],
+                    "eta_target": data["eta_target"],
+                    "status": data["status"].upper(),
+                    "dc_id": int(data["dc_id"]),
+                    "customer_id": int(data["customer_id"]),
+                }
+                if "description" in data:
+                    prefill_data["description"] = data["description"]
+                if "product_lines" in data and isinstance(data["product_lines"], list):
+                    prefill_data["product_lines"] = [
+                        {
+                            "product_id": int(pl.get("product_id", 0)),
+                            "quantity": float(pl.get("quantity", 1)),
+                            "volume": float(pl.get("volume", 0)),
+                            "weight": float(pl.get("weight", 0)),
+                            "price": float(pl.get("price", 0)),
+                        }
+                        for pl in data["product_lines"]
+                    ]
+
+                return {
+                    "ui_action": "PREFILL",
+                    "target": "create_delivery_order",
+                    "data": prefill_data,
+                    "message": "Data delivery order telah disiapkan. Silakan periksa dan simpan di form yang akan dibuka."
+                }
+
+            return {"ui_action": "ERROR", "message": "ERROR: Action tidak dikenal. Gunakan 'CREATE'."}
+        except Exception as e:
+            return {"ui_action": "ERROR", "message": f"ERROR: {str(e)}"}
+
+    return [system_control, get_available_options, manage_truck, manage_location, automate_shipment, manage_delivery_order]

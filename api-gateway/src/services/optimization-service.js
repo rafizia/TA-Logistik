@@ -187,6 +187,7 @@ const priorityOptimizationService = async (request) => {
         created_at: new Date().toISOString(),
         created_by: "User",
         shipment_cost: shipment.shipment_cost,
+        total_co2_emission_g: shipment.total_emission ?? null,
       });
 
       await Promise.all(
@@ -270,6 +271,7 @@ const saveBulkShipmentService = async (request) => {
       created_at: new Date().toISOString(),
       created_by: "User",
       shipment_cost: shipment.shipment_cost,
+      total_co2_emission_g: shipment.total_emission ?? null,
     });
 
     await Promise.all(

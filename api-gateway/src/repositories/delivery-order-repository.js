@@ -17,6 +17,9 @@ async function getAllDOsAdministrator(skip, limit) {
       loc_ori: true,
       loc_dest: true,
     },
+    orderBy: {
+      id: "desc",
+    },
   });
 
   return {
@@ -329,6 +332,71 @@ async function getDeliveryOrdersByShipmentId(shipmentId) {
   });
 }
 
+async function createDO(doData, productLinesData, createdBy, dcId, customerId) {
+  return await prisma.$transaction(async (tx) => {
+    let locOriId = doData.loc_ori_id;
+    let locDestId = doData.loc_dest_id;
+
+    if (!locOriId && dcId) {
+      const locOri = await tx.location.findFirst({ where: { dc_id: parseInt(dcId), is_dc: true } });
+      if (locOri) locOriId = locOri.id;
+    }
+
+    if (!locDestId && customerId) {
+      const locDest = await tx.location.findFirst({ where: { customer_id: parseInt(customerId) } });
+      if (locDest) locDestId = locDest.id;
+    }
+
+    let totalVolume = 0;
+    let totalQuantity = 0;
+
+    for (const pl of productLinesData) {
+      totalVolume += pl.volume;
+      totalQuantity += pl.quantity;
+    }
+
+    const newDO = await tx.deliveryOrder.create({
+      data: {
+        ...doData,
+        loc_ori_id: locOriId,
+        loc_dest_id: locDestId,
+        volume: totalVolume,
+        quantity: totalQuantity,
+        created_by: createdBy,
+      },
+    });
+
+    const productLinesToInsert = productLinesData.map((pl) => ({
+      ...pl,
+      delivery_order_id: newDO.id,
+    }));
+
+    if (productLinesToInsert.length > 0) {
+      await tx.productLine.createMany({
+        data: productLinesToInsert,
+      });
+    }
+
+    return newDO;
+  });
+}
+
+async function updateDO(id, data, customerId) {
+  let locDestId = data.loc_dest_id;
+  if (!locDestId && customerId) {
+    const locDest = await prisma.location.findFirst({ where: { customer_id: parseInt(customerId) } });
+    if (locDest) locDestId = locDest.id;
+  }
+
+  const updateData = { ...data };
+  if (locDestId) updateData.loc_dest_id = locDestId;
+
+  return await prisma.deliveryOrder.update({
+    where: { id: parseInt(id) },
+    data: updateData,
+  });
+}
+
 export {
   getAllDOsAdministrator,
   getAllDOs,
@@ -338,4 +406,6 @@ export {
   countDeliveryOrder,
   countUnprocessedDO,
   getDeliveryOrdersByShipmentId,
+  createDO,
+  updateDO,
 };

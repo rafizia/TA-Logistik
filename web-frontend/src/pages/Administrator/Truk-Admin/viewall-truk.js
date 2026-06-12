@@ -91,7 +91,7 @@ function ViewAllTruksAdmin() {
           <div className="flex space-x-3">
             <Button
               className="bg-[#1F54A3] text-white hover:bg-[#184481] px-4 py-2 rounded-[4px] text-[14px] font-[500]"
-              label="Buat baru"
+              label="Buat Truk"
               onClick={() => navigate('/administrator/truk/buat')}
               icon={<BsPlusLg size={14} />}
             />
