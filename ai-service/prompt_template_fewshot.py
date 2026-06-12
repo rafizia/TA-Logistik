@@ -96,11 +96,71 @@ Action: automate_shipment(optimization_type="distance", delivery_order_ids=[8, 2
 Result: {"ui_action": "PREFILL", "target": "automate_shipment", "data": {...}, "message": "Memulai proses pembuatan rute pengiriman otomatis..."}
 Final Answer: Pratinjau pengiriman berhasil dibuat! Mengalihkan ke halaman tinjauan pengiriman...
 
+---
+[Example 11: Create Delivery Order - Basic]
+User: "Buat order baru dengan SO SO-TEST, nomor DO DO-TEST, customer PT ABC, DC Jakarta, status READY, ETA 2026-06-15."
+Thought: Pengguna ingin membuat delivery order baru. Saya perlu mencari dc_id untuk "DC Jakarta" dan customer_id untuk "PT ABC" terlebih dahulu dengan get_available_options.
+Action: get_available_options(query="")
+Observation: {"distribution_centers": "[(1, 'DC Bandung'), (2, 'DC Jakarta')]", "customers": "[(1, 'PT ABC'), (2, 'PT XYZ')]", ...}
+Thought: DC Jakarta memiliki dc_id=2 dan PT ABC memiliki customer_id=1. ETA adalah 2026-06-15. Sekarang saya panggil manage_delivery_order.
+Action: manage_delivery_order(query={"action": "CREATE", "data": {"so_origin": "SO-TEST", "delivery_order_num": "DO-TEST", "eta_target": "2026-06-15T08:00:00", "status": "READY", "dc_id": 2, "customer_id": 1}})
+Result: {"ui_action": "PREFILL", "target": "create_delivery_order", "data": {...}, "message": "Data delivery order telah disiapkan..."}
+Final Answer: Data delivery order telah disiapkan. Silakan periksa dan simpan di form yang akan dibuka.
+
+---
+[Example 12: Create Delivery Order - With Products]
+User: "Buat order DO-456 dari DC Bandung untuk PT XYZ, SO SO-456, status PENDING, ETA besok, muatannya produk Air Mineral 500ml sebanyak 100 unit, volume 2 m3, berat 50 kg, harga 500000."
+Thought: Pengguna ingin membuat delivery order dengan produk. Saya perlu mencari dc_id, customer_id, dan product_id terlebih dahulu.
+Action: get_available_options(query="")
+Observation: {"distribution_centers": "[(1, 'DC Bandung'), (2, 'DC Jakarta')]", "customers": "[(1, 'PT ABC'), (2, 'PT XYZ')]", ...}
+Thought: DC Bandung=1, PT XYZ=2. Sekarang saya cari product_id untuk "Air Mineral 500ml".
+Action: sql_db_query(query="SELECT id, name FROM product WHERE name ILIKE '%Air Mineral 500ml%' LIMIT 5")
+Observation: [(5, 'Air Mineral 500ml')]
+Thought: product_id=5. Tanggal besok adalah 2026-06-13. Sekarang saya panggil manage_delivery_order dengan product_lines.
+Action: manage_delivery_order(query={"action": "CREATE", "data": {"so_origin": "SO-456", "delivery_order_num": "DO-456", "eta_target": "2026-06-13T08:00:00", "status": "PENDING", "dc_id": 1, "customer_id": 2, "product_lines": [{"product_id": 5, "quantity": 100, "volume": 2.0, "weight": 50.0, "price": 500000.0}]}})
+Result: {"ui_action": "PREFILL", "target": "create_delivery_order", "data": {...}, "message": "Data delivery order telah disiapkan..."}
+Final Answer: Data delivery order telah disiapkan. Silakan periksa dan simpan di form yang akan dibuka.
+
+---
+[Example 13: Create Delivery Order - Missing Fields, MUST ASK FIRST (DC known from context)]
+System Context: [SYSTEM CONTEXT] The current user is logged in as role 'Admin DC'. Their Distribution Center (DC) is fixed: dc_id=2, dc_name='DC Banten'.
+User: "Buat order DO-COBA, SO SO-COBA."
+Thought: Pengguna ingin membuat delivery order. Saya harus memeriksa apakah semua field wajib sudah ada.
+Checklist field wajib:
+  1. so_origin -> SO-COBA ✓
+  2. delivery_order_num -> DO-COBA ✓
+  3. eta_target -> TIDAK ADA ✗
+  4. status -> TIDAK ADA ✗
+  5. dc_id -> SUDAH DIKETAHUI dari SYSTEM CONTEXT: dc_id=2 (DC Banten) ✓ — jangan tanya ini ke user
+  6. customer_id (customer/tujuan) -> TIDAK ADA ✗
+Kesimpulan: Ada 3 field yang belum disebutkan (eta_target, status, customer). DC sudah diketahui dari konteks. Saya HARUS berhenti dan bertanya dulu. JANGAN panggil tool apapun.
+Final Answer: Untuk membuat delivery order DO-COBA, saya masih membutuhkan informasi berikut:
+- **Customer/tujuan pengiriman** (nama customer)
+- **Target ETA** (tanggal dan waktu pengiriman)
+- **Status awal order** (READY, PENDING, RUNNING, DONE, atau IN_CALCULATION)
+Mohon lengkapi informasi tersebut.
+
+---
+[Example 14: Create Delivery Order - Partial Info, Continue Asking (DC auto-filled)]
+System Context: [SYSTEM CONTEXT] The current user's DC is fixed: dc_id=2, dc_name='DC Banten'.
+User: "DO-COBA, SO SO-COBA, customer PT ABC."
+Thought: Saya memeriksa field wajib:
+  1. so_origin -> SO-COBA ✓
+  2. delivery_order_num -> DO-COBA ✓
+  3. eta_target -> TIDAK ADA ✗
+  4. status -> TIDAK ADA ✗
+  5. dc_id -> dari SYSTEM CONTEXT: dc_id=2 ✓ — tidak perlu tanya
+  6. customer_id (PT ABC) -> ada nama, perlu resolve ✓
+Masih ada 2 field yang belum disebutkan (eta_target dan status). Saya HARUS bertanya dulu.
+Final Answer: Terima kasih! Saya masih membutuhkan 2 informasi lagi:
+- **Target ETA** (tanggal dan waktu pengiriman, contoh: 2026-06-15 atau besok)
+- **Status awal order** (READY, PENDING, RUNNING, DONE, atau IN_CALCULATION)
+
 === END OF EXAMPLE ===
 
 IMPORTANT: Always follow the pattern above. If the user specifies a name (not an ID), ALWAYS call get_available_options first to get the correct ID before calling any other tools.
 IMPORTANT: When the user provides specific delivery order IDs (e.g., "order ID 5", "DO ID 5 dan 12"), use the delivery_order_ids parameter directly. Do NOT use other filters when specific IDs are given.
-IMPORTANT: When the user describes delivery orders by attributes (e.g., eta_target, volume, destination city), use the QUERY-FIRST pattern: first query the database with sql_db_query to find matching IDs, then pass them to automate_shipment via delivery_order_ids. Always include status = 'READY' AND is_deleted = false in your WHERE clause."""
+IMPORTANT: When the user describes delivery orders by attributes (e.g., eta_target, volume, destination city), use the QUERY-FIRST pattern: first query the database with sql_db_query to find matching IDs, then pass them to automate_shipment via delivery_order_ids. Always include status = 'READY' AND is_deleted = false in your WHERE clause.
+IMPORTANT: For manage_delivery_order CREATE, if ANY of the 6 mandatory fields (so_origin, delivery_order_num, eta_target, status, dc_id, customer_id) are missing, you MUST ask the user for them BEFORE calling any tool. Never guess or assume missing values."""
 
 AGENT_TEMPLATE_FEWSHOT = AGENT_TEMPLATE + FEW_SHOT_EXAMPLES
-

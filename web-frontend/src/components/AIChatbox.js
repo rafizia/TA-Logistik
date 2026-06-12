@@ -64,6 +64,24 @@ export default function AIChatbox({ onClose }) {
         : process.env.REACT_APP_BACKEND_URL.replace(/\/$/, "") + '/ai/';
       
       //const aiBaseUrl = (process.env.REACT_APP_BACKEND_URL || "").replace(/\/$/, "") + '/ai/';
+      // Extract DC info from token to inject user context into AI
+      let userDcId = null
+      let userDcName = null
+      let userRoleName = null
+      const tokenForAI = sessionStorage.getItem('token')
+      if (tokenForAI) {
+        try {
+          const decoded = jwtDecode(tokenForAI)
+          userRoleName = decoded.role?.name
+          userDcId = decoded.role?.dc_id || decoded.dc_id
+          // Fetch dc name if we have dc_id
+          if (userDcId) {
+            // We'll send dc_id; the AI service will use it
+            userDcName = decoded.role?.dc_name || null
+          }
+        } catch (e) {}
+      }
+
       const response = await fetch(`${aiBaseUrl}/chat`, {
         method: 'POST',
         headers: {
@@ -71,7 +89,13 @@ export default function AIChatbox({ onClose }) {
         },
         body: JSON.stringify({ 
           query: userText,
-          history: messages.filter((msg, index) => !(index === 0 && msg.text === 'Halo! Ada yang bisa saya bantu?'))
+          session_id: sessionStorage.getItem('session_id') || 'default_session',
+          history: messages.filter((msg, index) => !(index === 0 && msg.text === 'Halo! Ada yang bisa saya bantu?')),
+          user_context: {
+            role: userRoleName,
+            dc_id: userDcId,
+            dc_name: userDcName,
+          }
         }),
       });
 
@@ -215,6 +239,7 @@ export default function AIChatbox({ onClose }) {
           'delivery_orders_list': '/delivery-order',
           'add_delivery_order': '/delivery-order/tambah',
           'edit_delivery_order': '/delivery-order/edit',
+          'create_delivery_order': '/delivery-orders/create',
           'locations_list': '/lokasi',
           'add_location': '/lokasi/buat',
           'edit_location': '/lokasi/update',

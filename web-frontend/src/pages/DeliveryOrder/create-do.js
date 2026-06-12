@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import axiosAuthInstance from '../../utils/axios-auth-instance'
 import { Loading } from '../../components/Loading'
 import DatePicker from 'react-datepicker'
@@ -13,6 +13,7 @@ import jwtDecode from 'jwt-decode'
 
 function CreateDO() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [showLoading, setShowLoading] = useState(false)
 
   // Master Data
@@ -46,6 +47,9 @@ function CreateDO() {
     { product_id: '', volume: 0, weight: 0, price: 0, quantity: 1, unit_volume: 'm3', unit_weight: 'kg', unit_price: 'Rp', unit_quantity: 'pcs' }
   ])
 
+  // Track whether master data has been loaded to apply prefill
+  const [masterDataLoaded, setMasterDataLoaded] = useState(false)
+
   useEffect(() => {
     fetchMasterData()
   }, [])
@@ -77,6 +81,7 @@ function CreateDO() {
       setCustomers(customersData)
       setLocations(locsData)
       setProducts(resProducts.data.data.product || [])
+      setMasterDataLoaded(true)
     } catch (error) {
       console.error('Error fetching master data:', error)
       toast.error('Gagal memuat data master')
@@ -84,6 +89,55 @@ function CreateDO() {
       setShowLoading(false)
     }
   }
+
+  // Prefill from AI state (manage_delivery_order PREFILL action)
+  useEffect(() => {
+    if (!masterDataLoaded) return
+    const aiState = location.state
+    if (!aiState) return
+
+    if (aiState.so_origin) setSoOrigin(aiState.so_origin)
+    if (aiState.delivery_order_num) setDoNum(aiState.delivery_order_num)
+    if (aiState.eta_target) setEtaTarget(new Date(aiState.eta_target))
+    if (aiState.status) {
+      const statusOpt = statusOptions.find(s => s.value === aiState.status)
+      if (statusOpt) setStatusDropdown(statusOpt)
+    }
+    if (aiState.dc_id) {
+      // dcs is available after masterDataLoaded; if userRole != Super, dcs is single-item
+      setDcs(prev => {
+        const found = prev.find(d => parseInt(d.value) === parseInt(aiState.dc_id))
+        if (found && userRole === 'Super') setDcDropdown(found)
+        return prev
+      })
+      // For Super role, do an additional lookup from the full list
+      axiosAuthInstance.get('/dcs').then(res => {
+        const all = res.data.data.map(d => ({ value: d.id, name: d.name }))
+        const found = all.find(d => parseInt(d.value) === parseInt(aiState.dc_id))
+        if (found) setDcDropdown(found)
+      }).catch(() => {})
+    }
+    if (aiState.customer_id) {
+      axiosAuthInstance.get('/customers?limit=1000').then(res => {
+        const all = (res.data.data.customers || []).map(c => ({ value: c.id, name: c.name, Location: c.Location }))
+        const found = all.find(c => parseInt(c.value) === parseInt(aiState.customer_id))
+        if (found) setCustomerDropdown(found)
+      }).catch(() => {})
+    }
+    if (aiState.product_lines && Array.isArray(aiState.product_lines) && aiState.product_lines.length > 0) {
+      setProductLines(aiState.product_lines.map(pl => ({
+        product_id: String(pl.product_id || ''),
+        volume: pl.volume ?? 0,
+        weight: pl.weight ?? 0,
+        price: pl.price ?? 0,
+        quantity: pl.quantity ?? 1,
+        unit_volume: 'm3',
+        unit_weight: 'kg',
+        unit_price: 'Rp',
+        unit_quantity: 'pcs'
+      })))
+    }
+  }, [masterDataLoaded])
 
   const handleAddProductLine = () => {
     setProductLines([

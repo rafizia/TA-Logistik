@@ -1,5 +1,6 @@
 import os
 import json
+from sqlalchemy import text
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,7 +15,7 @@ from tools import use_tools
 from langchain.agents import create_agent, AgentState
 from langchain.agents.middleware import before_model
 from langchain.messages import RemoveMessage
-from typing import Any
+from typing import Any, Optional
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.checkpoint.memory import InMemorySaver
 
@@ -81,17 +82,58 @@ agent = create_agent(
     system_prompt=sys_prompt,
     middleware=[trim_messages],
     checkpointer=memory,
-    #debug=True
+    debug=True
 )
+
+class UserContext(BaseModel):
+    role: Optional[str] = None
+    dc_id: Optional[int] = None
+    dc_name: Optional[str] = None
 
 class ChatRequest(BaseModel):
     query: str
     session_id: str = "default_session"
+    user_context: Optional[UserContext] = None
 
 @app.post("/chat")
 async def chat_with_ai(request: ChatRequest):
     try:
         input_messages = [{"role": "user", "content": request.query}]
+
+        # Inject user context (DC info) as a system message prefix
+        if request.user_context:
+            ctx = request.user_context
+            if ctx.dc_id:
+                dc_info_parts = [f"dc_id={ctx.dc_id}"]
+                if ctx.dc_name:
+                    dc_info_parts.append(f"dc_name='{ctx.dc_name}'")
+                else:
+                    try:
+                        sql_dc = text("SELECT name FROM dc WHERE id = :dc_id")
+                        with db._engine.connect() as conn:
+                            row = conn.execute(sql_dc, {"dc_id": ctx.dc_id}).fetchone()
+                        if row:
+                            dc_info_parts.append(f"dc_name='{row[0]}'")
+                    except Exception:
+                        pass
+                dc_context_msg = (
+                    f"[SYSTEM CONTEXT] The current user is logged in as role '{ctx.role or 'Admin DC'}'. "
+                    f"Their Distribution Center (DC) is fixed and CANNOT be changed: {', '.join(dc_info_parts)}. "
+                    f"When creating a delivery order, you MUST use this dc_id automatically. "
+                    f"Do NOT ask the user about which DC to use. The dc_id is already determined."
+                )
+            else:
+                dc_context_msg = (
+                    f"[SYSTEM CONTEXT] The current user is logged in as role '{ctx.role or 'Super'}'. "
+                    f"They do NOT have a fixed Distribution Center (DC). "
+                    f"When creating a delivery order, you MUST ask the user which DC they want to use."
+                )
+
+            input_messages = [
+                {"role": "system", "content": dc_context_msg},
+                {"role": "user", "content": request.query}
+            ]
+
         config = {"configurable": {"thread_id": request.session_id}}
 
         response = await agent.ainvoke(
@@ -105,7 +147,7 @@ async def chat_with_ai(request: ChatRequest):
         
         # Iterate over messages in reverse to find the latest tool call or final answer
         for msg in reversed(final_messages):
-            if msg.type == "tool" and msg.name in ["system_control", "manage_truck", "manage_location", "automate_shipment"]:
+            if msg.type == "tool" and msg.name in ["system_control", "manage_truck", "manage_location", "automate_shipment", "manage_delivery_order"]:
                 # tool returned a direct dict or stringified JSON
                 try:
                     output = msg.content
