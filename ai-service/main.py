@@ -89,6 +89,7 @@ class UserContext(BaseModel):
     role: Optional[str] = None
     dc_id: Optional[int] = None
     dc_name: Optional[str] = None
+    token: Optional[str] = None
 
 class ChatRequest(BaseModel):
     query: str
@@ -98,6 +99,11 @@ class ChatRequest(BaseModel):
 @app.post("/chat")
 async def chat_with_ai(request: ChatRequest):
     try:
+        from context import request_token
+        if request.user_context and request.user_context.token:
+            request_token.set(request.user_context.token)
+        else:
+            request_token.set("")
         input_messages = [{"role": "user", "content": request.query}]
 
         # Inject user context (DC info) as a system message prefix
@@ -147,7 +153,12 @@ async def chat_with_ai(request: ChatRequest):
         
         # Iterate over messages in reverse to find the latest tool call or final answer
         for msg in reversed(final_messages):
-            if msg.type == "tool" and msg.name in ["system_control", "manage_truck", "manage_location", "automate_shipment", "manage_delivery_order"]:
+            if msg.type == "tool" and msg.name in ["system_control", "manage_truck", "manage_location", "automate_shipment", "simulate_shipment", "manage_delivery_order"]:
+                # Special case: simulate_shipment returns a plain string, not a dict
+                if msg.name == "simulate_shipment":
+                    if not reply_text:
+                        reply_text = str(msg.content)
+                    break
                 # tool returned a direct dict or stringified JSON
                 try:
                     output = msg.content

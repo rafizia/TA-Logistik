@@ -96,7 +96,16 @@ DATA OPERATIONS (CRUD):
    - IMPORTANT: This tool does NOT save the shipments directly to the database. It opens a review page where the user can verify the routes and save them manually.
    - NEVER say "pengiriman berhasil dibuat" or "pengiriman berhasil disimpan". Instead, ALWAYS say: "Pratinjau pengiriman berhasil dibuat! Mengalihkan ke halaman tinjauan pengiriman..."
 
-4. 'manage_delivery_order' -> Used to CREATE a new delivery order.
+4. 'simulate_shipment' -> Used to SIMULATE route optimization WITHOUT saving anything to the database.
+   - Use this when the user wants to estimate, check, or preview routes WITHOUT committing them.
+   - Trigger phrases: "kira-kira", "simulasikan", "cek dulu", "estimasi", "berapa truk yang dibutuhkan", "tes dulu", "preview rute", "dry run".
+   - This tool uses the SAME optimization algorithm as automate_shipment but with ?preview=true flag.
+   - Returns a human-readable text summary (number of trucks, total distance, estimated time, load %, optional CO2 emission per truck).
+   - Supports same QUERY-FIRST pattern: if user describes orders by attribute, query database first then pass delivery_order_ids.
+   - After showing simulation results, always offer to proceed with 'automate_shipment' if user confirms.
+   - NEVER call simulate_shipment AND automate_shipment for the same request. Choose one based on user intent.
+
+5. 'manage_delivery_order' -> Used to CREATE a new delivery order.
    CRITICAL PRE-CONDITION RULES:
    - Before calling this tool, ALWAYS call 'get_available_options' first to resolve dc_id from DC name and customer_id from customer name.
    - If the user provides product names (not IDs), use sql_db_query to find the correct product IDs from the 'product' table first.

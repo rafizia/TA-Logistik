@@ -235,3 +235,6 @@ experiment-old
 
 # check do status
 api-gateway/check-do-status.js
+
+# ai-service
+ai-service/__pycache__/

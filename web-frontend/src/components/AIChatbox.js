@@ -95,6 +95,7 @@ export default function AIChatbox({ onClose }) {
             role: userRoleName,
             dc_id: userDcId,
             dc_name: userDcName,
+            token: tokenForAI,
           }
         }),
       });

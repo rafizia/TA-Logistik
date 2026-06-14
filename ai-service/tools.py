@@ -1,5 +1,7 @@
 import re
+import os
 import json
+import requests as http_requests
 from langchain.tools import tool
 from sqlalchemy import text
 
@@ -439,4 +441,131 @@ def use_tools(db):
         except Exception as e:
             return {"ui_action": "ERROR", "message": f"ERROR: {str(e)}"}
 
-    return [system_control, get_available_options, manage_truck, manage_location, automate_shipment, manage_delivery_order]
+    @tool
+    def simulate_shipment(
+        optimization_type: str,
+        delivery_order_ids: list[int] = None,
+        start_date: str = None,
+        end_date: str = None,
+        customer_id: int = None,
+        kabupaten_kota: str = None,
+    ) -> str:
+        """
+        Use this tool to SIMULATE (dry-run/preview) route optimization WITHOUT saving anything to the database.
+        Use this when the user asks things like:
+        - "Kira-kira kalau...", "Simulasikan...", "Cek dulu berapa truk yang dibutuhkan...",
+          "Estimasi rute untuk...", "Berapa total jarak kalau...", "Tes dulu..."
+        This tool calls the same optimization algorithm as automate_shipment, but results are NOT saved.
+        Returns a human-readable summary of the estimated shipment plan.
+        Parameters:
+        - optimization_type: 'distance', 'emission', 'load', or 'balance'
+        - delivery_order_ids: list of specific delivery order IDs (optional)
+        - start_date: 'YYYY-MM-DD' (optional)
+        - end_date: 'YYYY-MM-DD' (optional)
+        - customer_id: integer customer ID (optional)
+        - kabupaten_kota: city/district filter (optional)
+        """
+        try:
+            from context import request_token
+            _gateway_url = os.getenv("REACT_APP_BACKEND_URL", "http://localhost:8080")
+            _gateway_token = request_token.get() or os.getenv("API_GATEWAY_SIMULATE_TOKEN", "")
+
+            payload = {"priority": optimization_type}
+            if delivery_order_ids:
+                payload["delivery_orders_id"] = delivery_order_ids
+            if start_date:
+                payload["start_date"] = start_date
+            if end_date:
+                payload["end_date"] = end_date
+            if customer_id:
+                payload["customer_id"] = customer_id
+            if kabupaten_kota:
+                payload["kabupaten_kota"] = kabupaten_kota
+
+            headers = {"Content-Type": "application/json"}
+            if _gateway_token:
+                headers["Authorization"] = f"Bearer {_gateway_token}"
+
+            resp = http_requests.post(
+                f"{_gateway_url}/api/v1/priority-opt?preview=true",
+                json=payload,
+                headers=headers,
+                timeout=120,
+            )
+
+            if resp.status_code != 200:
+                return f"Simulasi gagal: server mengembalikan status {resp.status_code}. Pesan: {resp.text[:300]}"
+
+            result = resp.json()
+            data = result.get("data", result)
+            shipments = data.get("shipments", [])
+            failed_dos = data.get("failed_delivery_orders", [])
+
+            if not shipments:
+                total_failed = len(failed_dos)
+                return (
+                    f"Hasil simulasi: Tidak ada rute yang dapat dibentuk dari pesanan yang diberikan.\n"
+                    f"Total pesanan yang tidak bisa dijadwalkan: {total_failed}"
+                )
+
+            lines = [f"**Hasil Simulasi Rute ({optimization_type.upper()})**\n"]
+            total_orders = 0
+            total_dist_m = 0
+            total_time_min = 0
+
+            for i, s in enumerate(shipments, 1):
+                truck = s.get("truck", {})
+                truck_plate = truck.get("plate_number", "N/A")
+                truck_type = truck.get("truck_type", {}).get("name", "N/A") if isinstance(truck.get("truck_type"), dict) else "N/A"
+                dos = s.get("delivery_orders", [])
+                dist_m = s.get("total_dist", 0) or 0
+                time_min = s.get("total_time", 0) or 0
+                curr_cap = s.get("current_capacity", 0) or 0
+                max_cap = s.get("max_capacity", 1) or 1
+                emission = s.get("total_emission")
+
+                total_orders += len(dos)
+                total_dist_m += dist_m
+                total_time_min += time_min
+
+                dist_km = dist_m / 1000
+                time_h = int(time_min // 60)
+                time_m = int(time_min % 60)
+                fill_pct = round((curr_cap / max_cap) * 100, 1) if max_cap else 0
+
+                truck_line = f"Truk {i}: {truck_plate} ({truck_type})"
+                details = [
+                    f"  • Pesanan: {len(dos)} DO",
+                    f"  • Jarak: {dist_km:.2f} km",
+                    f"  • Est. Waktu: {time_h}j {time_m}m",
+                    f"  • Muatan: {fill_pct}% dari kapasitas",
+                ]
+                if emission is not None:
+                    details.append(f"  • Emisi CO₂: {emission/1000:.2f} kg")
+
+                lines.append(truck_line)
+                lines.extend(details)
+                lines.append("")
+
+            summary = [
+                f"**Ringkasan Simulasi:**",
+                f"  - Total truk digunakan : {len(shipments)} truk",
+                f"  - Total pesanan terlayani: {total_orders} DO",
+                f"  - Total jarak keseluruhan: {total_dist_m/1000:.2f} km",
+                f"  - Pesanan tidak terjadwalkan: {len(failed_dos)} DO",
+                f"",
+                f"Ini hanya simulasi. Data belum disimpan ke sistem.",
+                f"Jika Anda puas dengan hasilnya, katakan 'buat pengiriman' untuk memproses secara resmi.",
+            ]
+            lines.extend(summary)
+
+            return "\n".join(lines)
+
+        except http_requests.exceptions.ConnectionError:
+            return "Simulasi gagal: tidak dapat terhubung ke server optimasi. Pastikan API Gateway berjalan."
+        except http_requests.exceptions.Timeout:
+            return "Simulasi gagal: server optimasi membutuhkan waktu terlalu lama (timeout). Coba kurangi jumlah pesanan."
+        except Exception as e:
+            return f"Simulasi gagal karena kesalahan tak terduga: {str(e)}"
+
+    return [system_control, get_available_options, manage_truck, manage_location, automate_shipment, simulate_shipment, manage_delivery_order]
