@@ -14,7 +14,6 @@ Pages:
 - delivery_orders_list: List of all delivery orders
 - add_delivery_order: Form to add a new delivery order
 - edit_delivery_order: Form to edit delivery order details
-- create_delivery_order: Form to create a new delivery order (with prefill support)
 - products_line_list: List of all products lines
 - add_product_line: Form to add a new product line
 - edit_product_line: Form to edit product line details
