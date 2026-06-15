@@ -82,7 +82,7 @@ agent = create_agent(
     system_prompt=sys_prompt,
     middleware=[trim_messages],
     checkpointer=memory,
-    debug=True
+    #debug=True
 )
 
 class UserContext(BaseModel):

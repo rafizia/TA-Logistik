@@ -11,7 +11,7 @@ import axiosAuthInstance from '../../../utils/axios-auth-instance'
 function UpdateLokasiAdmin() {
   let navigate = useNavigate()
   const { state } = useLocation()
-  const idLokasi = state?.Id
+  const idLokasi = state?.Id || state?.id
 
   const [dataCustomer, setDataCustomer] = useState([])
   const [dataDC, setDataDC] = useState([])

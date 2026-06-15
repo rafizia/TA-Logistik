@@ -11,7 +11,7 @@ import axiosAuthInstance from '../../../utils/axios-auth-instance'
 function UpdateTrukAdmin() {
   let navigate = useNavigate()
   const location = useLocation()
-  const trukId = location.state.Id
+  const trukId = location.state?.Id || location.state?.id
   const dc_id = localStorage.getItem('dcId')
   const userRole = localStorage.getItem('userRole')
 

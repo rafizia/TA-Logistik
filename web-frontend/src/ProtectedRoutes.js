@@ -78,6 +78,8 @@ function ProtectedRoutes() {
           <Route path="/administrator/pengiriman/select-do-automate" element={<PrivateRoute><SidebarAdmin shipment={true} title="Otomatisasi Pengiriman"><DoSelectAutomateAdmin /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/pengiriman/otomatisasi" element={<PrivateRoute><SidebarAdmin shipment={true} title="Otomatisasi Pengiriman"><ResultBuatPengiriman /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/pengiriman/select-do-manual" element={<PrivateRoute><SidebarAdmin shipment={true} title="Pengiriman Manual"><DoSelectManualAdmin /></SidebarAdmin></PrivateRoute>} />
+          <Route path="/administrator/pengiriman/:idShipment" element={<PrivateRoute><SidebarAdmin shipment={true} title="Detail Pengiriman"><ResultDetailPengiriman /></SidebarAdmin></PrivateRoute>} />
+          <Route path="/administrator/pengiriman/visualisasi/:idShipment" element={<PrivateRoute><SidebarAdmin shipment={true} title="Visualisasi Pengiriman"><VisualizationShipment /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/truk/buat" element={<PrivateRoute><SidebarAdmin truk={true} title="Tambah Truk"><CreateTrukAdmin /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/truk/update" element={<PrivateRoute><SidebarAdmin truk={true} title="Ubah Truk"><UpdateTrukAdmin /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/truk/import" element={<PrivateRoute><SidebarAdmin truk={true} title="Unggah Data Truk"><ImportTruk /></SidebarAdmin></PrivateRoute>} />

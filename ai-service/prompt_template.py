@@ -161,6 +161,8 @@ CRITICAL TABLE RULES:
 
 EXECUTION RULES:
 - If the user wants to "view," "open," or "show," use action_type='NAVIGATE' with `system_control`.
+- If navigating to a specific detail page like a location, customer, delivery order, or shipment (e.g., "detail lokasi X", "detail customer Y", "detail order DO-001", or "detail pengiriman SHP-001"), you MUST use `sql_db_query` to find its ID in the database (`location`, `customer`, `delivery_order`, or `shipment` table) first, and then call `system_control(action_type="NAVIGATE", target_page="detail_location", "detail_customer", "detail_delivery_order", or "detail_shipment", data={"id": <id>})`.
+- If navigating to a specific edit page (e.g., "edit lokasi X", "edit truk B 1234 CD", "edit customer Y", or "edit order DO-001"), you MUST use `sql_db_query` to find its ID in the database, and then call `system_control(action_type="NAVIGATE", target_page="edit_location", "edit_truck", "edit_customer", or "edit_delivery_order", data={"Id": <id>})`. Note the uppercase 'I' in 'Id' for edit pages.
 - If the user wants to "add," "create," "update," or "delete" data, use the appropriate CRUD tool (like `manage_truck`).
 - If you need to navigate the user after a successful data operation, you can do so in a subsequent thought/action.
 

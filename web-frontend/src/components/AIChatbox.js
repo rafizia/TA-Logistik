@@ -46,7 +46,7 @@ export default function AIChatbox({ onClose }) {
 
     try {
       // Use specific AI URL if defined, otherwise infer from BACKEND_URL (which goes through Nginx)
-      /*
+      
       let aiBaseUrl = process.env.REACT_APP_AI_URL;
       if (!aiBaseUrl) {
         const baseUrl = process.env.REACT_APP_BACKEND_URL || "";
@@ -57,11 +57,11 @@ export default function AIChatbox({ onClose }) {
         } else {
           aiBaseUrl = baseUrl.replace(/\/$/, "") + '/ai';
         }
-      }*/
+      }
       // Local
-      const aiBaseUrl = process.env.REACT_APP_BACKEND_URL.includes('localhost') 
-        ? 'http://localhost:8000' 
-        : process.env.REACT_APP_BACKEND_URL.replace(/\/$/, "") + '/ai/';
+      //const aiBaseUrl = process.env.REACT_APP_BACKEND_URL.includes('localhost') 
+      //  ? 'http://localhost:8000' 
+      //  : process.env.REACT_APP_BACKEND_URL.replace(/\/$/, "") + '/ai/';
       
       //const aiBaseUrl = (process.env.REACT_APP_BACKEND_URL || "").replace(/\/$/, "") + '/ai/';
       // Extract DC info from token to inject user context into AI
@@ -239,7 +239,7 @@ export default function AIChatbox({ onClose }) {
           'bulk_edit_truck': '/truk/bulk-ubah',
           'delivery_orders_list': '/delivery-order',
           'add_delivery_order': '/delivery-orders/create',
-          'edit_delivery_order': '/delivery-order/edit',
+          'edit_delivery_order': '/delivery-orders/edit',
           'locations_list': '/lokasi',
           'add_location': '/lokasi/buat',
           'edit_location': '/lokasi/update',
@@ -259,6 +259,10 @@ export default function AIChatbox({ onClose }) {
           'roles_list': '/role',
           'add_role': '/role/tambah',
           'edit_role': '/role/edit',
+          'detail_location': '/lokasi',
+          'detail_customer': '/customer',
+          'detail_delivery_order': '/delivery-order',
+          'detail_shipment': '/pengiriman',
         };
 
         if (routeMap[target]) {
@@ -270,7 +274,22 @@ export default function AIChatbox({ onClose }) {
               userRole = decodedToken.role?.name;
             }
             const basePath = userRole === 'Super' ? '/administrator' : '';
-            navigate(`${basePath}${routeMap[target]}`, { state: data.command.data });
+            let finalRoute = `${basePath}${routeMap[target]}`;
+            
+            let payload = data.command.data;
+            if (payload) {
+              if (payload.id !== undefined && payload.Id === undefined) {
+                payload.Id = payload.id;
+              } else if (payload.Id !== undefined && payload.id === undefined) {
+                payload.id = payload.Id;
+              }
+            }
+            
+            if ((target === 'detail_location' || target === 'detail_customer' || target === 'detail_delivery_order' || target === 'edit_delivery_order' || target === 'detail_shipment') && payload && payload.id) {
+              finalRoute = `${finalRoute}/${payload.id}`;
+            }
+            
+            navigate(finalRoute, { state: payload });
           } catch (error) {
             console.error('Error saat decode token untuk navigasi', error);
           }

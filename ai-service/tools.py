@@ -28,14 +28,16 @@ def use_tools(db):
     """
 
     @tool
-    def system_control(action_type: str = "NAVIGATE", target_page: str = "dashboard") -> dict:
+    def system_control(action_type: str = "NAVIGATE", target_page: str = "dashboard", data: dict = None) -> dict:
         """
         VERY IMPORTANT: Use this tool for navigation or system actions.
+        For navigating to detail pages (like detail_location), pass the entity's ID in `data`, e.g., data={"id": 123}.
         """
         try:
             return {
                 "ui_action": action_type,
                 "target": target_page,
+                "data": data,
                 "message": f"Mengarahkan Anda ke halaman {target_page.replace('_', ' ')}..."
             }
         except Exception:
