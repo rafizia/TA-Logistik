@@ -4,42 +4,61 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const RABBITMQ_URL = process.env.RABBITMQ_URL;
-let connection, channel;
+let connection = null;
+let channel = null;
+let isConnecting = false;
 
 export const initRabbitMQ = async () => {
-  if (!connection) {
-    let retries = 10;
-    while (retries > 0) {
-      try {
-        console.log(`[INIT] Connecting to RabbitMQ at ${RABBITMQ_URL.replace(/:([^:@]+)@/, ":***@")}...`);
-        connection = await amqp.connect(RABBITMQ_URL, { heartbeat: 10 });
-        
-        connection.on("error", (err) => {
-          console.error("[ERROR] RabbitMQ connection error:", err.message);
-        });
+  if (connection && channel) {
+    return channel;
+  }
 
-        connection.on("close", () => {
-          console.warn("[WARN] RabbitMQ connection closed. Node process might need restart or reconnection.");
-        });
+  if (isConnecting) {
+    while (isConnecting) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    if (channel) return channel;
+  }
 
-        channel = await connection.createChannel();
-        
-        channel.on("error", (err) => {
-          console.error("[ERROR] RabbitMQ channel error:", err.message);
-        });
+  isConnecting = true;
+  let retries = 10;
+  while (retries > 0) {
+    try {
+      console.log(`[INIT] Connecting to RabbitMQ at ${RABBITMQ_URL.replace(/:([^:@]+)@/, ":***@")}...`);
+      connection = await amqp.connect(RABBITMQ_URL, { heartbeat: 10 });
+      
+      connection.on("error", (err) => {
+        console.error("[ERROR] RabbitMQ connection error:", err);
+      });
 
-        console.log("[DONE] RabbitMQ connected");
-        break;
-      } catch (err) {
-        console.error(`[WAIT] RabbitMQ connection failed: ${err.message}. Retrying in 5 seconds... (${retries} retries left)`);
-        retries -= 1;
-        if (retries === 0) {
-          throw new Error(`Failed to connect to RabbitMQ after multiple attempts: ${err.message}`);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 5000));
+      connection.on("close", () => {
+        console.warn("[WARN] RabbitMQ connection closed. Reconnecting in 5 seconds...");
+        connection = null;
+        channel = null;
+        setTimeout(() => {
+          initRabbitMQ().catch((err) => console.error("[ERROR] Reconnection failed:", err));
+        }, 5000);
+      });
+
+      channel = await connection.createChannel();
+      
+      channel.on("error", (err) => {
+        console.error("[ERROR] RabbitMQ channel error:", err);
+      });
+
+      console.log("[DONE] RabbitMQ connected");
+      break;
+    } catch (err) {
+      console.error(`[WAIT] RabbitMQ connection failed:`, err, `. Retrying in 5 seconds... (${retries} retries left)`);
+      retries -= 1;
+      if (retries === 0) {
+        isConnecting = false;
+        throw err;
       }
+      await new Promise((resolve) => setTimeout(resolve, 5000));
     }
   }
+  isConnecting = false;
   return channel;
 };
 
@@ -53,6 +72,6 @@ export const closeRabbitMQ = async () => {
     if (channel) await channel.close();
     if (connection) await connection.close();
   } catch (err) {
-    console.error("[ERROR] Error closing RabbitMQ connection:", err.message);
+    console.error("[ERROR] Error closing RabbitMQ connection:", err);
   }
 };
