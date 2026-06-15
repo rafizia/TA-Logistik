@@ -25,7 +25,7 @@ export const initRabbitMQ = async () => {
   while (retries > 0) {
     try {
       console.log(`[INIT] Connecting to RabbitMQ at ${RABBITMQ_URL.replace(/:([^:@]+)@/, ":***@")}...`);
-      connection = await amqp.connect(RABBITMQ_URL, { heartbeat: 10 });
+      connection = await amqp.connect(RABBITMQ_URL, { heartbeat: 60 });
       
       connection.on("error", (err) => {
         console.error("[ERROR] RabbitMQ connection error:", err);
@@ -62,9 +62,24 @@ export const initRabbitMQ = async () => {
   return channel;
 };
 
-export const getChannel = () => {
-  if (!channel) throw new Error("[NOT YET] RabbitMQ not initialized");
-  return channel;
+export const getChannel = async () => {
+  if (channel) return channel;
+
+  console.warn("[WAIT] Channel not ready. Waiting for reconnection (max 10s)...");
+  const maxWaitMs = 10000;
+  const interval = 500;
+  let waited = 0;
+
+  while (waited < maxWaitMs) {
+    await new Promise((resolve) => setTimeout(resolve, interval));
+    waited += interval;
+    if (channel) {
+      console.log("[DONE] Channel ready after waiting.");
+      return channel;
+    }
+  }
+
+  throw new Error("[FAILED] RabbitMQ channel not available after 10 seconds. Please try again.");
 };
 
 export const closeRabbitMQ = async () => {

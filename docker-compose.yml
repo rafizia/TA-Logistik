@@ -49,6 +49,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+      start_period: 30s
     restart: always
     ports:
       - "5672:5672"
