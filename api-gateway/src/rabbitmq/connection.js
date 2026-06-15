@@ -12,7 +12,7 @@ export const initRabbitMQ = async () => {
     while (retries > 0) {
       try {
         console.log(`[INIT] Connecting to RabbitMQ at ${RABBITMQ_URL.replace(/:([^:@]+)@/, ":***@")}...`);
-        connection = await amqp.connect(RABBITMQ_URL);
+        connection = await amqp.connect(RABBITMQ_URL, { heartbeat: 10 });
         
         connection.on("error", (err) => {
           console.error("[ERROR] RabbitMQ connection error:", err.message);
