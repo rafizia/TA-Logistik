@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import jwtDecode from 'jwt-decode';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import axiosAuthInstance from '../utils/axios-auth-instance';
 
 export default function AIChatbox({ onClose }) {
   const [messages, setMessages] = useState([
@@ -44,16 +45,72 @@ export default function AIChatbox({ onClose }) {
     setIsLoading(true);
 
     try {
-      const response = await fetch('http://localhost:8000/chat', {
+      // Use specific AI URL if defined, otherwise infer from BACKEND_URL (which goes through Nginx)
+      /*
+      let aiBaseUrl = process.env.REACT_APP_AI_URL;
+      if (!aiBaseUrl) {
+        const baseUrl = process.env.REACT_APP_BACKEND_URL || "";
+        if (baseUrl.includes('/api/v1')) {
+          aiBaseUrl = baseUrl.replace('/api/v1', '/ai');
+        } else if (baseUrl.includes('/api')) {
+          aiBaseUrl = baseUrl.replace('/api', '/ai');
+        } else {
+          aiBaseUrl = baseUrl.replace(/\/$/, "") + '/ai';
+        }
+      }*/
+      // Local
+      const aiBaseUrl = process.env.REACT_APP_BACKEND_URL.includes('localhost') 
+        ? 'http://localhost:8000' 
+        : process.env.REACT_APP_BACKEND_URL.replace(/\/$/, "") + '/ai/';
+      
+      //const aiBaseUrl = (process.env.REACT_APP_BACKEND_URL || "").replace(/\/$/, "") + '/ai/';
+      // Extract DC info from token to inject user context into AI
+      let userDcId = null
+      let userDcName = null
+      let userRoleName = null
+      const tokenForAI = sessionStorage.getItem('token')
+      if (tokenForAI) {
+        try {
+          const decoded = jwtDecode(tokenForAI)
+          userRoleName = decoded.role?.name
+          userDcId = decoded.role?.dc_id || decoded.dc_id
+          // Fetch dc name if we have dc_id
+          if (userDcId) {
+            // We'll send dc_id; the AI service will use it
+            userDcName = decoded.role?.dc_name || null
+          }
+        } catch (e) {}
+      }
+
+      // Ambil session_id dari storage; fallback ke user ID dari token agar tidak tercampur antar user
+      let sessionId = sessionStorage.getItem('session_id');
+      if (!sessionId && tokenForAI) {
+        try {
+          const decoded = jwtDecode(tokenForAI);
+          const userId = decoded.id || decoded.sub || decoded.user_id;
+          if (userId) sessionId = `user_${userId}`;
+        } catch (e) {}
+      }
+      sessionId = sessionId || 'default_session';
+
+      const response = await fetch(`${aiBaseUrl}/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ 
           query: userText,
-          history: messages 
+          session_id: sessionId,
+          history: messages.filter((msg, index) => !(index === 0 && msg.text === 'Halo! Ada yang bisa saya bantu?')),
+          user_context: {
+            role: userRoleName,
+            dc_id: userDcId,
+            dc_name: userDcName,
+            token: tokenForAI,
+          }
         }),
       });
+
 
       if (!response.ok) {
         throw new Error('Jaringan bermasalah atau API error');
@@ -65,19 +122,139 @@ export default function AIChatbox({ onClose }) {
       if (data.command) {
         const { type, target } = data.command;
 
+        if (target === 'automate_shipment') {
+          try {
+            setMessages((prev) => [
+              ...prev,
+              { sender: 'ai', text: 'Memproses optimisasi rute di background, mohon tunggu beberapa saat...' },
+            ]);
+            
+            const { start_date, end_date, optimization_type, customer_id, kabupaten_kota, so_origin, delivery_order_num, delivery_order_ids } = data.command.data || {};
+            let optType = optimization_type || 'distance';
+            if (optType === 'route') {
+              optType = 'distance';
+            } else if (optType === 'volume') {
+              optType = 'load';
+            } else if (optType === 'distance_volume') {
+              optType = 'balance';
+            }
+            
+            let doIds;
+            
+            // If specific delivery_order_ids are provided, use them directly
+            if (delivery_order_ids && Array.isArray(delivery_order_ids) && delivery_order_ids.length > 0) {
+              doIds = delivery_order_ids;
+            } else {
+              // Otherwise, query delivery orders by filters
+              let url = `/delivery-orders?skip=0&limit=1000&status=READY`;
+              if (start_date && end_date) {
+                const formattedStartDate = new Date(start_date).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                const formattedEndDate = new Date(end_date).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                url += `&start_date=${formattedStartDate}&end_date=${formattedEndDate}`;
+              }
+              if (customer_id) {
+                url += `&customer_id=${customer_id}`;
+              }
+              if (kabupaten_kota) {
+                url += `&kabupaten_kota=${encodeURIComponent(kabupaten_kota)}`;
+              }
+              if (so_origin) {
+                url += `&so_origin=${encodeURIComponent(so_origin)}`;
+              }
+              if (delivery_order_num) {
+                url += `&delivery_order_num=${encodeURIComponent(delivery_order_num)}`;
+              }
+              
+              const doResponse = await axiosAuthInstance.get(url);
+              const deliveryOrders = doResponse.data?.data?.deliveryOrders || [];
+              
+              if (deliveryOrders.length === 0) {
+                const errMsg = 'Maaf, tidak ada Delivery Order yang berstatus READY pada kriteria filter tersebut untuk DC Anda.';
+                setMessages((prev) => [
+                  ...prev,
+                  { sender: 'ai', text: errMsg },
+                ]);
+                alert(errMsg);
+                setIsLoading(false);
+                return;
+              }
+              
+              doIds = deliveryOrders.map(item => item.id);
+            }
+            
+            let dc_id = '';
+            const token = sessionStorage.getItem('token');
+            if (token) {
+              const decodedToken = jwtDecode(token);
+              dc_id = decodedToken.dc_id || decodedToken.role?.dc_id; // Check both places
+            }
+            
+            const optResponse = await axiosAuthInstance.post(
+              `priority-opt?preview=true`,
+              { delivery_orders_id: doIds, priority: optType },
+              { headers: { dc_id: dc_id }, timeout: 600000 }
+            );
+            
+            console.log('Pengiriman otomatis berhasil:', optResponse.data);
+            const shipmentsResult = optResponse.data?.data?.shipments || [];
+            
+            if (shipmentsResult.length === 0) {
+              const errMsg = 'Maaf, algoritma tidak dapat membentuk pengiriman (mungkin karena kapasitas truk tidak mencukupi, tidak ada truk tersedia, atau lokasi tidak terjangkau).';
+              setMessages((prev) => [
+                ...prev,
+                { sender: 'ai', text: errMsg },
+              ]);
+              alert(errMsg);
+              setIsLoading(false);
+              return;
+            }
+            
+            setMessages((prev) => [
+              ...prev,
+              { sender: 'ai', text: 'Pratinjau pengiriman berhasil dibuat! Mengalihkan ke halaman tinjauan pengiriman...' },
+            ]);
+            
+            setTimeout(() => {
+              let userRole = '';
+              if (token) {
+                const decodedToken = jwtDecode(token);
+                userRole = decodedToken.role?.name;
+              }
+              const basePath = userRole === 'Super' ? '/administrator' : '';
+              // Store response data to pass it to the review page
+              sessionStorage.setItem('automate_shipment_data', JSON.stringify(optResponse.data));
+              navigate(`${basePath}/pengiriman/otomatisasi`, { state: { optResponse: optResponse.data } });
+            }, 2500);
+            
+          } catch (error) {
+            console.error('Gagal membuat pengiriman otomatis:', error);
+            const errMsg = 'Terjadi kesalahan saat memproses optimisasi rute atau server terlalu sibuk.';
+            setMessages((prev) => [
+              ...prev,
+              { sender: 'ai', text: errMsg },
+            ]);
+            alert(errMsg);
+          } finally {
+            setIsLoading(false);
+          }
+          return;
+        }
+
         const routeMap = {
-          'shipments_list': '/shipment',
+          'shipments_list': '/pengiriman',
           'add_shipment': '/shipment/tambah',
           'edit_shipment': '/shipment/edit',
           'trucks_list': '/truk',
           'add_truck': '/truk/buat',
+          'bulk_add_truck': '/truk/bulk-buat',
           'edit_truck': '/truk/update',
+          'bulk_edit_truck': '/truk/bulk-ubah',
           'delivery_orders_list': '/delivery-order',
-          'add_delivery_order': '/delivery-order/tambah',
-          'edit_delivery_order': '/delivery-order/edit',
+          'add_delivery_order': '/delivery-orders/create',
+          'edit_delivery_order': '/delivery-orders/edit',
           'locations_list': '/lokasi',
-          'add_location': '/lokasi/tambah',
-          'edit_location': '/lokasi/edit',
+          'add_location': '/lokasi/buat',
+          'edit_location': '/lokasi/update',
           'dashboard': '/dashboard',
           'products_line_list': '/product-line',
           'add_product_line': '/product-line/tambah',
@@ -94,6 +271,10 @@ export default function AIChatbox({ onClose }) {
           'roles_list': '/role',
           'add_role': '/role/tambah',
           'edit_role': '/role/edit',
+          'detail_location': '/lokasi',
+          'detail_customer': '/customer',
+          'detail_delivery_order': '/delivery-order',
+          'detail_shipment': '/pengiriman',
         };
 
         if (routeMap[target]) {
@@ -105,7 +286,22 @@ export default function AIChatbox({ onClose }) {
               userRole = decodedToken.role?.name;
             }
             const basePath = userRole === 'Super' ? '/administrator' : '';
-            navigate(`${basePath}${routeMap[target]}`, { state: data.command.data });
+            let finalRoute = `${basePath}${routeMap[target]}`;
+            
+            let payload = data.command.data;
+            if (payload) {
+              if (payload.id !== undefined && payload.Id === undefined) {
+                payload.Id = payload.id;
+              } else if (payload.Id !== undefined && payload.id === undefined) {
+                payload.id = payload.Id;
+              }
+            }
+            
+            if ((target === 'detail_location' || target === 'detail_customer' || target === 'detail_delivery_order' || target === 'edit_delivery_order' || target === 'detail_shipment') && payload && payload.id) {
+              finalRoute = `${finalRoute}/${payload.id}`;
+            }
+            
+            navigate(finalRoute, { state: payload });
           } catch (error) {
             console.error('Error saat decode token untuk navigasi', error);
           }

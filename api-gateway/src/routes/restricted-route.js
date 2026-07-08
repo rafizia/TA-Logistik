@@ -5,6 +5,8 @@ import {
   getAllDOAdminController,
   getAllDOController,
   getDOByIDController,
+  createDOController,
+  updateDOController,
 } from "../controllers/delivery-order-controller.js"; //DO
 import {
   getAllLocationsAdminController,
@@ -40,7 +42,7 @@ import {
   getAllCustomersController,
   getCustomerByIdController,
 } from "../controllers/customers-controller.js"; //CUSTOMER
-import { priorityOptimizationController } from "../controllers/optimization-controller.js"; //OPTIMIZATION
+import { priorityOptimizationController, bulkSaveShipmentController } from "../controllers/optimization-controller.js"; //OPTIMIZATION
 import {
   addBoxToDOController,
   boxDimensionCalculation,
@@ -311,6 +313,22 @@ restrictedRouter.get("/api/v1/delivery-orders", getAllDOController);
 
 /**
  * @swagger
+ * /api/v1/delivery-orders:
+ *   post:
+ *     summary: Create a new delivery order
+ *     tags: [Delivery Order]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       201:
+ *         description: Delivery Order Created
+ *       401:
+ *         description: Unauthorized
+ */
+restrictedRouter.post("/api/v1/delivery-orders", createDOController);
+
+/**
+ * @swagger
  * /api/v1/delivery-order/{doId}:
  *   get:
  *     summary: Get delivery order by ID
@@ -331,6 +349,7 @@ restrictedRouter.get("/api/v1/delivery-orders", getAllDOController);
  *         description: Delivery order not found
  */
 restrictedRouter.get("/api/v1/delivery-order/:doId", getDOByIDController);
+restrictedRouter.put("/api/v1/delivery-orders/:doId", updateDOController);
 
 //locations
 /**
@@ -812,9 +831,8 @@ restrictedRouter.patch(
  *       401:
  *         description: Unauthorized
  */
-restrictedRouter.post("/api/v1/priority-opt", priorityOptimizationController
-
-);
+restrictedRouter.post("/api/v1/priority-opt", priorityOptimizationController);
+restrictedRouter.post("/api/v1/priority-opt/bulk-save", bulkSaveShipmentController);
 
 /**
  * @swagger

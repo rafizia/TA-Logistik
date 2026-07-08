@@ -15,7 +15,7 @@ export { ViewAllShipment, DoSelectAutomateAdmin } from './Administrator/Shipment
 // USER
 export { ViewLocation, ViewAllLokasi } from './Lokasi'
 export { ViewAllProduk } from './Produk'
-export { ViewTrucks, ViewAllTrucks } from './Truk'
+export { ViewTrucks, ViewAllTrucks, ImportTruk, BulkCreateTruk, BulkUpdateTruk } from './Truk'
 export { ViewAllPengiriman, CreatePengirimanSelectOrder, CreatePengirimanVisualisasiCluster, ViewPengiriman } from './Pengiriman'
 export { ViewAllOrder, UpdateOrder } from './Order'
 export { Dashboard } from './Dashboard'

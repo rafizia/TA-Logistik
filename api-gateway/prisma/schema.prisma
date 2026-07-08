@@ -144,6 +144,7 @@ model Shipment {
   eta                          DateTime?          @db.Timestamptz(3)
   truck_id                     Int?
   shipment_cost                Int?
+  total_co2_emission_g         Float?
   truck                        Truck?             @relation(fields: [truck_id], references: [id])
   ShipmentLocation             ShipmentLocation[]
   ShipmentDO                   ShipmentDO[]

@@ -1,12 +1,11 @@
 networks:
   tms_net:
     name: tms_net
-  nginx-manager_customnetwork:
-    external: true
 
 volumes:
   db_data:
   storage_uploads:
+  rabbitmq_data:
 
 services:
   # API Gateway stack
@@ -50,10 +49,13 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+      start_period: 30s
     restart: always
     ports:
       - "5672:5672"
       - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
     networks:
       - tms_net
     security_opt:
@@ -73,12 +75,12 @@ services:
     container_name: e2e_logistics_opt_algorithm
     environment:
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/paragon?schema=public
     restart: always
     ports:
       - "8001:8000"
     networks:
-      tms_net: {}
-      nginx-manager_customnetwork: {}
+      - tms_net
     security_opt:
       - seccomp=unconfined
 
@@ -91,8 +93,8 @@ services:
       dockerfile: Dockerfile
     pull_policy: build
     image: custom-api-gateway:local
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     container_name: e2e_logistics_api_gateway
     depends_on:
       db:
@@ -113,10 +115,7 @@ services:
     restart: always
     command: sh -c "npx prisma migrate deploy && node index.js"
     networks:
-      tms_net: {}
-      nginx-manager_customnetwork: {}
-
-  
+      - tms_net
 
   # Storage service
   storage_service:
@@ -137,10 +136,7 @@ services:
       - STORAGE_API_KEY=${STORAGE_API_KEY}
     restart: always
     networks:
-      tms_net: {}
-      nginx-manager_customnetwork: {}
-
-  
+      - tms_net
 
   # Worker
   tmslastmile_worker:
@@ -174,8 +170,6 @@ services:
     security_opt:
       - seccomp=unconfined
 
-
-
   # Web Frontend
   web_frontend:
     ulimits:
@@ -189,15 +183,14 @@ services:
     pull_policy: build
     image: custom-web-frontend:local
     container_name: e2e_logistics_frontend
-    ports:
-      - "13000:3000"
+    expose:
+      - "3000"
     environment:
       - REACT_APP_GOOGLE_MAPS_KEY=${REACT_APP_GOOGLE_MAPS_KEY}
       - REACT_APP_BACKEND_URL=${REACT_APP_BACKEND_URL}
     restart: always
     networks:
-      tms_net: {}
-      nginx-manager_customnetwork: {}
+      - tms_net
 
   ml_service:
     ulimits:
@@ -228,17 +221,39 @@ services:
     security_opt:
       - seccomp=unconfined
 
-#  ai-service:
-#    build: ./ai-service
-#    container_name: e2e_logistics_ai_service
-#    ports:
-#      - "8006:8000"
- #   environment:
-#      - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/paragon
-#      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-#    networks:
-#      - tms_net
-#    extra_hosts:
-#      - "host.docker.internal:host-gateway"
-#    depends_on:
-#      - db
+  ai-service:
+    ulimits:
+      stack: 8388608   
+      nproc: 40960
+    security_opt:
+      - seccomp=unconfined
+    build: ./ai-service
+    container_name: e2e_logistics_ai_service
+    expose:
+      - "8000"
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/paragon
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - PYTHONUNBUFFERED=1
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
+      - OLLAMA_MODEL=${OLLAMA_MODEL}
+    networks:
+      - tms_net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - db
+
+  # Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: e2e_logistics_nginx
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - web_frontend
+      - api_gateway
+    networks:
+      - tms_net

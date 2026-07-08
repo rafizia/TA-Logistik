@@ -5,8 +5,10 @@ import { Modal } from "../../components/Modal";
 import { BaseTablePagination } from '../../components/BaseTablePagination';
 import { Loading } from '../../components/Loading';
 import { FiCheckSquare } from 'react-icons/fi';
-import { useNavigate } from 'react-router-dom'
-
+import { useNavigate, useLocation } from 'react-router-dom';
+import axiosAuthInstance from '../../utils/axios-auth-instance';
+import { toast } from 'react-toastify';
+import jwtDecode from 'jwt-decode';
 function ResultBuatPengiriman() {
   const [selectedPengiriman, setSelectedPengiriman] = useState(null);
   const [activeTab, setActiveTab] = useState('berhasil');
@@ -18,7 +20,7 @@ function ResultBuatPengiriman() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const storedData = localStorage.getItem('responseData');
+    const storedData = sessionStorage.getItem('automate_shipment_data') || localStorage.getItem('responseData');
     if (storedData) {
       const response = JSON.parse(storedData);
       if (response.success) {
@@ -44,9 +46,34 @@ function ResultBuatPengiriman() {
   console.log('Current pengirimanList:', pengirimanList)
   console.log('Current failedDeliveryOrders:', failedDeliveryOrders)
 
-  const handleSimpanPengiriman = () => {
-    setModalKonfirmasi(false);
-    navigate('/pengiriman');
+  const handleSimpanPengiriman = async () => {
+    try {
+      setLoading(true);
+      const token = sessionStorage.getItem('token');
+      // Filter only shipments that haven't been saved yet
+      const unsavedShipments = pengirimanList.filter(p => p.status !== 'saved');
+      if (unsavedShipments.length > 0) {
+        await axiosAuthInstance.post('/priority-opt/bulk-save', { shipments: unsavedShipments });
+        toast.success('Semua pengiriman berhasil disimpan!');
+      } else {
+        toast.info('Tidak ada pengiriman baru yang perlu disimpan.');
+      }
+      setModalKonfirmasi(false);
+      
+      let userRole = '';
+      if (token) {
+        const decodedToken = jwtDecode(token);
+        userRole = decodedToken.role?.name;
+      }
+      const basePath = userRole === 'Super' ? '/administrator' : '';
+      navigate(`${basePath}/pengiriman`);
+      
+    } catch (error) {
+      console.error('Gagal menyimpan pengiriman:', error);
+      toast.error('Gagal menyimpan pengiriman.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const columns = React.useMemo(() => [

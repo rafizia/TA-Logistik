@@ -55,6 +55,9 @@ const Login = () => {
                 localStorage.setItem("dcId", decodedToken.role ? decodedToken.role.dc_id : "null");
                 
                 sessionStorage.setItem("token", token)
+                // Generate session_id unik per login agar history chat AI selalu bersih saat login baru
+                const userId = decodedToken.id || decodedToken.sub || decodedToken.user_id || username;
+                sessionStorage.setItem("session_id", `user_${userId}_${Date.now()}`)
                 navigate("/")
                 window.location.reload();
             }

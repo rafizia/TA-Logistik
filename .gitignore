@@ -226,3 +226,15 @@ opt-algorithm/lab-1/.idea/
 opt-algorithm/lab-1/db.sqlite3/
 opt-algorithm/lab-1/hello_name/migrations/*.py
 opt-algorithm/db.sqlite3
+
+# logs
+logs
+csv
+experiment
+experiment-old
+
+# check do status
+api-gateway/check-do-status.js
+
+# ai-service
+ai-service/__pycache__/

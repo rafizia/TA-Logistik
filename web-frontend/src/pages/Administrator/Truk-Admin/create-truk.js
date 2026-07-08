@@ -267,7 +267,7 @@ function CreateTrukAdmin() {
 
             <div className="flex">
               <div className="w-full">
-                <TextField label="Volume Maksimal Kendaraan (ml)" placeholder="0" className="w-full" value={newTrukData.max_individual_capacity_volume} onChange={(e) => handleInputChange('max_individual_capacity_volume', e.target.value)} isError={isError && checkAttributeNull(newTrukData.max_individual_capacity_volume)} />
+                <TextField label="Volume Maksimal Kendaraan (ml)" placeholder="0" required={true} className="w-full" value={newTrukData.max_individual_capacity_volume} onChange={(e) => handleInputChange('max_individual_capacity_volume', e.target.value)} isError={isError && checkAttributeNull(newTrukData.max_individual_capacity_volume)} />
               </div>
               {/* <div className="w-full">
                                 <TextField label="Berat Maksimal Kendaraan (kg)"className="w-full" value={pallet} disabled={true}/>
