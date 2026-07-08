@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import axiosAuthInstance from '../../utils/axios-auth-instance'
 import { Loading } from '../../components/Loading'
 import DatePicker from 'react-datepicker'
@@ -39,12 +39,16 @@ function EditDO() {
 
   const [productLines, setProductLines] = useState([])
 
+  const location = useLocation()
+
   useEffect(() => {
     fetchMasterAndDO()
   }, [])
 
   const fetchMasterAndDO = async () => {
     setShowLoading(true)
+    // Simpan AI prefill state sebelum apapun (bisa hilang setelah navigation)
+    const aiState = location.state || null
     try {
       const [resDcs, resCustomers, resLocations, resProducts, resDo] = await Promise.all([
         axiosAuthInstance.get('/dcs'),
@@ -64,21 +68,27 @@ function EditDO() {
       setLocations(locsData)
       setProducts(prodsData)
 
-      // Set DO Data
+      // Set DO Data dari database
       const doData = resDo.data.data
       setSoOrigin(doData.so_origin || '')
       setDoNum(doData.delivery_order_num || '')
       if (doData.eta_target) setEtaTarget(new Date(doData.eta_target))
       
-      const statusOpt = statusOptions.find(s => s.value === doData.status) || statusOptions[0]
-      setStatusDropdown(statusOpt)
+      // Status: gunakan prefill AI jika ada, otherwise dari DO asli
+      const aiStatus = aiState?.status
+      if (aiStatus) {
+        const statusOpt = statusOptions.find(s => s.value === aiStatus)
+        if (statusOpt) setStatusDropdown(statusOpt)
+      } else {
+        const statusOpt = statusOptions.find(s => s.value === doData.status) || statusOptions[0]
+        setStatusDropdown(statusOpt)
+      }
 
-      // Find original DC from loc_ori
+      // Find original DC from loc_ori (tidak bisa diubah)
       if (doData.loc_ori && doData.loc_ori.dc_id) {
         const dcOpt = dcsData.find(d => d.value === doData.loc_ori.dc_id)
         if (dcOpt) setDcDropdown(dcOpt)
       } else if (doData.loc_ori_id) {
-        // Fallback search in locations
         const loc = locsData.find(l => l.id === doData.loc_ori_id)
         if (loc && loc.dc_id) {
           const dcOpt = dcsData.find(d => d.value === loc.dc_id)
@@ -86,16 +96,21 @@ function EditDO() {
         }
       }
 
-      // Find Customer from loc_dest
-      if (doData.loc_dest && doData.loc_dest.customer_id) {
-        const custOpt = customersData.find(c => c.value === doData.loc_dest.customer_id)
-        if (custOpt) setCustomerDropdown(custOpt)
-      } else if (doData.loc_dest_id) {
-        // Fallback search in locations
-        const loc = locsData.find(l => l.id === doData.loc_dest_id)
-        if (loc && loc.customer_id) {
-          const custOpt = customersData.find(c => c.value === loc.customer_id)
+      // Customer: gunakan prefill AI jika ada, otherwise dari DO asli
+      const aiCustomerId = aiState?.customer_id
+      if (aiCustomerId) {
+        const found = customersData.find(c => parseInt(c.value) === parseInt(aiCustomerId))
+        if (found) setCustomerDropdown(found)
+      } else {
+        if (doData.loc_dest && doData.loc_dest.customer_id) {
+          const custOpt = customersData.find(c => c.value === doData.loc_dest.customer_id)
           if (custOpt) setCustomerDropdown(custOpt)
+        } else if (doData.loc_dest_id) {
+          const loc = locsData.find(l => l.id === doData.loc_dest_id)
+          if (loc && loc.customer_id) {
+            const custOpt = customersData.find(c => c.value === loc.customer_id)
+            if (custOpt) setCustomerDropdown(custOpt)
+          }
         }
       }
 
@@ -117,6 +132,7 @@ function EditDO() {
       setShowLoading(false)
     }
   }
+
 
   const handleSubmit = async (e) => {
     e.preventDefault()

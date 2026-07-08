@@ -61,11 +61,20 @@ Action: automate_shipment(optimization_type="distance", customer_id=1, customer_
 Result: {"ui_action": "PREFILL", "target": "automate_shipment", "data": {...}, "message": "Memulai proses pembuatan rute pengiriman otomatis..."}
 
 ---
-[Example 7: Truck Update]
+[Example 7: Truck Update - Single]
 User: "Ubah status truk B 5678 CD menjadi UNAVAILABLE."
-Thought: Pengguna ingin mengubah status truk. Saya menggunakan manage_truck dengan action UPDATE.
-Action: manage_truck(query={"action": "UPDATE", "data": {"plate_number": "B 5678 CD", "first_status": "UNAVAILABLE"}})
+Thought: Pengguna ingin mengubah status satu truk. Saya menggunakan manage_truck dengan action UPDATE. Data HARUS berupa list meskipun hanya satu truk.
+Action: manage_truck(query={"action": "UPDATE", "data": [{"plate_number": "B 5678 CD", "first_status": "UNAVAILABLE"}]})
 Result: {"ui_action": "PREFILL", "target": "bulk_edit_truck", "data": [...], "message": "Data truk siap diedit."}
+Final Answer: Data truk siap diedit. Halaman review perbarui truk akan dibuka, silakan periksa dan klik "Perbarui Semua" untuk menyimpan perubahan.
+
+---
+[Example 7b: Truck Update - Bulk]
+User: "Ubah DC truk B 1234 AB dan D 5678 CD ke DC Jakarta, dan ubah status truk A 9999 ZZ menjadi UNAVAILABLE."
+Thought: Pengguna ingin mengubah beberapa truk sekaligus (bulk update). Saya menggunakan manage_truck dengan action UPDATE dan data sebagai LIST berisi semua truk yang akan diubah.
+Action: manage_truck(query={"action": "UPDATE", "data": [{"plate_number": "B 1234 AB", "dc_name": "DC Jakarta"}, {"plate_number": "D 5678 CD", "dc_name": "DC Jakarta"}, {"plate_number": "A 9999 ZZ", "first_status": "UNAVAILABLE"}]})
+Result: {"ui_action": "PREFILL", "target": "bulk_edit_truck", "data": [...], "message": "Data truk siap diedit."}
+Final Answer: Data 3 truk telah disiapkan untuk diperbarui. Halaman review akan dibuka, silakan periksa dan klik "Perbarui Semua" untuk menyimpan perubahan.
 
 ---
 [Example 8: Shipping Automation with Specific Delivery Order IDs]

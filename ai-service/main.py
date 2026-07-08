@@ -14,7 +14,7 @@ from prompt_template_fewshot import AGENT_TEMPLATE_FEWSHOT
 from tools import use_tools
 from langchain.agents import create_agent, AgentState
 from langchain.agents.middleware import before_model
-from langchain.messages import RemoveMessage
+from langchain_core.messages import RemoveMessage, trim_messages as lc_trim_messages
 from typing import Any, Optional
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.checkpoint.memory import InMemorySaver
@@ -60,19 +60,26 @@ memory = InMemorySaver()
 
 @before_model
 def trim_messages(state: AgentState, runtime: Any) -> dict | None:
-    """Keep only the last few messages to fit context window safely."""
+    """Keep only the messages that fit inside the context window based on max tokens."""
     messages = state.get("messages", [])
-    if len(messages) <= 6:
-        return None
+    
+    trimmed_messages = lc_trim_messages(
+        messages,
+        max_tokens=80000,
+        strategy="last",
+        token_counter="approximate",
+        start_on="human",
+        include_system=True,
+        allow_partial=False
+    )
 
-    first_msg = messages[0]
-    recent_messages = messages[-5:] if len(messages) % 2 == 0 else messages[-6:]
-    new_messages = [first_msg] + recent_messages
+    if len(trimmed_messages) == len(messages):
+        return None
 
     return {
         "messages": [
             RemoveMessage(id=REMOVE_ALL_MESSAGES),
-            *new_messages
+            *trimmed_messages
         ]
     }
 
@@ -82,7 +89,7 @@ agent = create_agent(
     system_prompt=sys_prompt,
     middleware=[trim_messages],
     checkpointer=memory,
-    #debug=True
+    debug=False
 )
 
 class UserContext(BaseModel):

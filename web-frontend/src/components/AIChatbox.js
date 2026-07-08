@@ -46,7 +46,7 @@ export default function AIChatbox({ onClose }) {
 
     try {
       // Use specific AI URL if defined, otherwise infer from BACKEND_URL (which goes through Nginx)
-      
+      /*
       let aiBaseUrl = process.env.REACT_APP_AI_URL;
       if (!aiBaseUrl) {
         const baseUrl = process.env.REACT_APP_BACKEND_URL || "";
@@ -57,11 +57,11 @@ export default function AIChatbox({ onClose }) {
         } else {
           aiBaseUrl = baseUrl.replace(/\/$/, "") + '/ai';
         }
-      }
+      }*/
       // Local
-      //const aiBaseUrl = process.env.REACT_APP_BACKEND_URL.includes('localhost') 
-      //  ? 'http://localhost:8000' 
-      //  : process.env.REACT_APP_BACKEND_URL.replace(/\/$/, "") + '/ai/';
+      const aiBaseUrl = process.env.REACT_APP_BACKEND_URL.includes('localhost') 
+        ? 'http://localhost:8000' 
+        : process.env.REACT_APP_BACKEND_URL.replace(/\/$/, "") + '/ai/';
       
       //const aiBaseUrl = (process.env.REACT_APP_BACKEND_URL || "").replace(/\/$/, "") + '/ai/';
       // Extract DC info from token to inject user context into AI
@@ -82,6 +82,17 @@ export default function AIChatbox({ onClose }) {
         } catch (e) {}
       }
 
+      // Ambil session_id dari storage; fallback ke user ID dari token agar tidak tercampur antar user
+      let sessionId = sessionStorage.getItem('session_id');
+      if (!sessionId && tokenForAI) {
+        try {
+          const decoded = jwtDecode(tokenForAI);
+          const userId = decoded.id || decoded.sub || decoded.user_id;
+          if (userId) sessionId = `user_${userId}`;
+        } catch (e) {}
+      }
+      sessionId = sessionId || 'default_session';
+
       const response = await fetch(`${aiBaseUrl}/chat`, {
         method: 'POST',
         headers: {
@@ -89,7 +100,7 @@ export default function AIChatbox({ onClose }) {
         },
         body: JSON.stringify({ 
           query: userText,
-          session_id: sessionStorage.getItem('session_id') || 'default_session',
+          session_id: sessionId,
           history: messages.filter((msg, index) => !(index === 0 && msg.text === 'Halo! Ada yang bisa saya bantu?')),
           user_context: {
             role: userRoleName,
@@ -99,6 +110,7 @@ export default function AIChatbox({ onClose }) {
           }
         }),
       });
+
 
       if (!response.ok) {
         throw new Error('Jaringan bermasalah atau API error');

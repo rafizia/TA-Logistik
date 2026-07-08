@@ -73,6 +73,7 @@ function ProtectedRoutes() {
           <Route path="/administrator/customer/:customerId" element={<PrivateRoute><SidebarAdmin customer={true} title="Detail Customer"><CustomerDetailPage /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/delivery-order" element={<PrivateRoute><SidebarAdmin deliveryOrder={true} title="Daftar DO"><ViewAllDOAdmin /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/delivery-order/:doId" element={<PrivateRoute><SidebarAdmin deliveryOrder={true} title="Detail DO"><DODetailPageAdmin /></SidebarAdmin></PrivateRoute>} />
+          <Route path="/administrator/delivery-orders/create" element={<PrivateRoute><SidebarAdmin deliveryOrder={true} title="Buat Order"><CreateDO /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/pengiriman" element={<PrivateRoute><SidebarAdmin shipment={true} title="Pengiriman"><ViewAllShipment /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/product-line" element={<PrivateRoute><SidebarAdmin productLine={true} title="Daftar Product Line"><ViewAllProductLineAdmin /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/pengiriman/select-do-automate" element={<PrivateRoute><SidebarAdmin shipment={true} title="Otomatisasi Pengiriman"><DoSelectAutomateAdmin /></SidebarAdmin></PrivateRoute>} />

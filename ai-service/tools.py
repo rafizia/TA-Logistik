@@ -82,15 +82,18 @@ def use_tools(db):
         Use this tool for CREATE, UPDATE, or DELETE operations on truck entities.
         Input must be a JSON string with:
         - action: 'CREATE', 'UPDATE', or 'DELETE'
-        - data: dictionary of truck fields (for UPDATE/DELETE), or LIST of truck dicts (for CREATE).
-        For CREATE: data must be a LIST of truck objects. Requires plate_number, type_id (or type_name), dc_id (or dc_name), max_individual_capacity_volume, first_status
-          Use this when user wants to create one or more trucks.
+        - data: For CREATE/UPDATE: ALWAYS a LIST of truck dicts (even for a single truck). For DELETE: a single dict.
+        For CREATE: data must be a non-empty LIST. Requires plate_number, type_id (or type_name), dc_id (or dc_name), max_individual_capacity_volume, first_status.
           You can provide 'type_name' instead of 'type_id', and 'dc_name' instead of 'dc_id'.
           IMPORTANT: plate_number MUST follow Indonesian license plate format:
           [1-2 letter area code] [1-4 digit registration number] [1-3 letter series code]
           Each part separated by a SINGLE SPACE. Example: "B 1234 RFS", "AB 12 CD".
           Example: {"action": "CREATE", "data": [{"plate_number": "B 1234 AB", "type_name": "Blind Van", "dc_name": "DC Jakarta", "max_individual_capacity_volume": 1500000, "first_status": "AVAILABLE"}]}
-        For UPDATE/DELETE: requires plate_number or id.
+        For UPDATE: data must ALWAYS be a non-empty LIST (even for a single truck). Each entry requires plate_number or id.
+          Only include fields the user wants to change; unchanged fields are preserved from the database.
+          Single truck: {"action": "UPDATE", "data": [{"plate_number": "B 1234 AB", "dc_name": "DC Jakarta"}]}
+          Bulk trucks:  {"action": "UPDATE", "data": [{"plate_number": "B 1234 AB", "dc_name": "DC Jakarta"}, {"plate_number": "D 5678 CD", "first_status": "UNAVAILABLE"}]}
+        For DELETE: requires plate_number or id in a single dict.
         """
         try:
             payload = query if isinstance(query, dict) else json.loads(query)
@@ -167,10 +170,7 @@ def use_tools(db):
                 }
 
             elif action == "UPDATE":
-                if isinstance(data, dict):
-                    data = [data]
-                
-                if not data:
+                if not isinstance(data, list) or len(data) == 0:
                     return {"ui_action": "ERROR", "message": "ERROR: For UPDATE, 'data' must be a non-empty list of truck objects."}
 
                 r_errors = resolve_truck_names(data)
@@ -218,6 +218,9 @@ def use_tools(db):
                     "message": "Data truk siap diedit."
                 }
 
+            # Catatan Revisi: 
+            # Fitur "DELETE" tidak jadi digunakan secara operasional.
+            # Karena aplikasi basis tidak menyediakan fitur untuk menghapus data.
             elif action == "DELETE":
                 identifier = data.get("plate_number") or data.get("id")
                 if not identifier:
@@ -288,6 +291,9 @@ def use_tools(db):
                     "message": "Data lokasi siap diedit."
                 }
 
+            # Catatan Revisi: 
+            # Fitur "DELETE" tidak jadi digunakan secara operasional.
+            # Karena aplikasi basis tidak menyediakan fitur untuk menghapus data.
             elif action == "DELETE":
                 identifier = data.get("id")
                 if not identifier:
@@ -375,9 +381,9 @@ def use_tools(db):
     @tool
     def manage_delivery_order(query: dict | str) -> dict:
         """
-        Use this tool to CREATE a new delivery order.
+        Use this tool to CREATE or UPDATE a delivery order.
         Input must be a JSON string with:
-        - action: 'CREATE'
+        - action: 'CREATE' or 'UPDATE'
         - data: dictionary of delivery order fields.
         For CREATE: requires so_origin, delivery_order_num, eta_target, status, dc_id, customer_id.
           Optional: description, product_lines (list of products to load).
@@ -389,11 +395,19 @@ def use_tools(db):
               product_id (int), quantity (float), volume (float), weight (float), price (float)
               Use sql_db_query to find product IDs by name if user provides product names.
         ALWAYS call get_available_options FIRST to resolve dc_id and customer_id from names.
-        IMPORTANT: This tool does NOT save to the database. It opens the create delivery order form with pre-filled data.
-        Example:
+        IMPORTANT: This tool does NOT save to the database. It opens the form with pre-filled data.
+        Example CREATE:
           {"action": "CREATE", "data": {"so_origin": "SO-001", "delivery_order_num": "DO-001",
            "eta_target": "2026-06-13T08:00:00", "status": "READY", "dc_id": 1, "customer_id": 2,
            "product_lines": [{"product_id": 3, "quantity": 10, "volume": 5.0, "weight": 100.0, "price": 50000.0}]}}
+        For UPDATE: data MUST be a single dict (NOT a list). Requires id (integer) OR delivery_order_num to identify the order.
+          Only status and customer_id can be changed.
+          - status must be one of: READY, PENDING, RUNNING, DONE, IN_CALCULATION.
+          - customer_id: integer ID of the customer (use get_available_options to resolve from name).
+          Use sql_db_query to find the DO id by delivery_order_num if the user provides the number.
+        Example UPDATE (always a single dict, never a list):
+          {{"action": "UPDATE", "data": {{"id": 5, "status": "DONE"}}}}
+          {{"action": "UPDATE", "data": {{"id": 5, "customer_id": 3}}}}
         """
         try:
             payload = query if isinstance(query, dict) else json.loads(query)
@@ -434,12 +448,55 @@ def use_tools(db):
 
                 return {
                     "ui_action": "PREFILL",
-                    "target": "create_delivery_order",
+                    "target": "add_delivery_order",
                     "data": prefill_data,
                     "message": "Data delivery order telah disiapkan. Silakan periksa dan simpan di form yang akan dibuka."
                 }
 
-            return {"ui_action": "ERROR", "message": "ERROR: Action tidak dikenal. Gunakan 'CREATE'."}
+            elif action == "UPDATE":
+                if isinstance(data, list):
+                    if len(data) == 0:
+                        return {"ui_action": "ERROR", "message": "ERROR: 'data' tidak boleh kosong untuk UPDATE."}
+                    data = data[0]
+
+                do_id   = data.get("id")
+                do_num  = data.get("delivery_order_num")
+
+                if not do_id and not do_num:
+                    return {"ui_action": "ERROR", "message": "ERROR: Untuk UPDATE, sertakan 'id' (integer) atau 'delivery_order_num' untuk mengidentifikasi order."}
+
+                if not do_id and do_num:
+                    sql_find = text("SELECT id FROM delivery_order WHERE delivery_order_num = :num AND is_deleted = false LIMIT 1")
+                    with db._engine.connect() as conn:
+                        row = conn.execute(sql_find, {"num": str(do_num)}).fetchone()
+                    if not row:
+                        return {"ui_action": "ERROR", "message": f"ERROR: Delivery order dengan nomor '{do_num}' tidak ditemukan."}
+                    do_id = row[0]
+
+                do_id = int(do_id)
+
+                allowed_fields = {"status", "customer_id"}
+                update_fields = {k: v for k, v in data.items() if k in allowed_fields}
+                if not update_fields:
+                    return {"ui_action": "ERROR", "message": "ERROR: Tidak ada field yang bisa diubah. Field yang dapat diperbarui: status, customer_id."}
+
+                if "status" in update_fields:
+                    valid_statuses = ["READY", "PENDING", "RUNNING", "DONE", "IN_CALCULATION"]
+                    status_val = str(update_fields["status"]).upper()
+                    if status_val not in valid_statuses:
+                        return {"ui_action": "ERROR", "message": f"ERROR: Status '{update_fields['status']}' tidak valid. Pilih salah satu dari: {', '.join(valid_statuses)}"}
+                    update_fields["status"] = status_val
+
+                prefill_data = {"id": do_id, **update_fields}
+
+                return {
+                    "ui_action": "PREFILL",
+                    "target": "edit_delivery_order",
+                    "data": prefill_data,
+                    "message": f"Data delivery order ID {do_id} siap diedit. Silakan periksa dan simpan perubahan di form yang akan dibuka."
+                }
+
+            return {"ui_action": "ERROR", "message": "ERROR: Action tidak dikenal. Gunakan 'CREATE' atau 'UPDATE'."}
         except Exception as e:
             return {"ui_action": "ERROR", "message": f"ERROR: {str(e)}"}
 
@@ -471,6 +528,24 @@ def use_tools(db):
             from context import request_token
             _gateway_url = os.getenv("REACT_APP_BACKEND_URL", "http://localhost:8080")
             _gateway_token = request_token.get() or os.getenv("API_GATEWAY_SIMULATE_TOKEN", "")
+
+            # MOCK RESPONSE UNTUK EVALUASI
+            if not _gateway_token:
+                return (
+                    f"**Hasil Simulasi Rute ({optimization_type.upper()})**\n\n"
+                    "Truk 1: B 1234 XY (CDE)\n"
+                    "  • Pesanan: 1 DO\n"
+                    f"  • Jarak: 45.20 km\n Emisi 50 kg"
+                    "  • Est. Waktu: 1j 15m\n"
+                    "  • Muatan: 80.5% dari kapasitas\n\n"
+                    "**Ringkasan Simulasi:**\n"
+                    "  - Total truk digunakan : 1 truk\n"
+                    "  - Total pesanan terlayani: 1 DO\n"
+                    "  - Total jarak keseluruhan: 45.20 km\n"
+                    "  - Pesanan tidak terjadwalkan: 0 DO\n\n"
+                    "Ini hanya simulasi. Data belum disimpan ke sistem.\n"
+                    "Jika Anda puas dengan hasilnya, katakan 'buat pengiriman' untuk memproses secara resmi."
+                )
 
             payload = {"priority": optimization_type}
             if delivery_order_ids:

@@ -125,15 +125,15 @@ function UpdateLokasiAdmin() {
   }, [idLokasi])
 
   const handleInputChange = (name, value) => {
-    setUpdateLokasiData({ ...updateLokasiData, [name]: value })
+    setUpdateLokasiData(prev => ({ ...prev, [name]: value }))
   }
 
   const handleDCDropdownChange = (selectedValue) => {
     setDCDropdown(selectedValue)
-    setUpdateLokasiData({
-      ...updateLokasiData,
+    setUpdateLokasiData(prev => ({
+      ...prev,
       dc_id: selectedValue.value
-    })
+    }))
   }
 
   const handleSubmit = () => {
