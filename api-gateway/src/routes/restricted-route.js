@@ -51,9 +51,23 @@ import {
   getAllBoxesController,
   createBoxController,
 } from "../controllers/box-controller.js"; // BOX
+import {
+  getChatHistoryController,
+  saveChatMessagesController,
+  getChatSessionsController,
+  createChatSessionController,
+  deleteChatSessionController,
+} from "../controllers/chat-history-controller.js"; // CHAT HISTORY
 
 const restrictedRouter = express.Router();
 restrictedRouter.use(jwtMiddleware);
+
+// chat history
+restrictedRouter.get("/api/v1/chat-history", getChatHistoryController);
+restrictedRouter.post("/api/v1/chat-messages", saveChatMessagesController);
+restrictedRouter.get("/api/v1/chat-sessions", getChatSessionsController);
+restrictedRouter.post("/api/v1/chat-sessions", createChatSessionController);
+restrictedRouter.delete("/api/v1/chat-sessions/:sessionId", deleteChatSessionController);
 
 //user
 /**
