@@ -35,12 +35,15 @@ const getMessagesBySessionId = async (sessionId, limit = 50) => {
 
     const messages = await prisma.chatMessage.findMany({
       where: { chat_session_id: session.id },
-      orderBy: { created_at: "desc" },
+      orderBy: [
+        { created_at: "desc" },
+        { id: "desc" },
+      ],
       take: limit,
     });
 
-    // Return in chronological order (ASC)
-    return messages.reverse();
+    // Ensure exact chronological order by autoincrement id ASC
+    return messages.sort((a, b) => a.id - b.id);
   } catch (error) {
     console.error("Error in getMessagesBySessionId:", error);
     throw new Error("Gagal mengambil histori pesan chat");
@@ -91,15 +94,16 @@ const createMessages = async (sessionId, userId, messages) => {
       }
     }
 
-    const createdData = messages.map((msg) => ({
-      chat_session_id: session.id,
-      sender: msg.sender,
-      text: msg.text,
-    }));
-
-    await prisma.chatMessage.createMany({
-      data: createdData,
-    });
+    // Insert sequentially to ensure autoincrement ID reflects exact message order
+    for (const msg of messages) {
+      await prisma.chatMessage.create({
+        data: {
+          chat_session_id: session.id,
+          sender: msg.sender,
+          text: msg.text,
+        },
+      });
+    }
 
     await prisma.chatSession.update({
       where: { id: session.id },
