@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BsBusFront, BsHouse, BsBoxSeam, BsTruck, BsGeoAlt, BsChevronDown, BsCart, BsArrowLeft, BsPeople, BsPersonGear, BsClipboard, BsReceipt, BsBasket, BsUnion, BsPersonLinesFill, BsRobot } from 'react-icons/bs'
 import { Modal } from './Modal'
-import AIChatbox from './AIChatbox'
+import AIChatbox from './chat'
 import axios from 'axios'
 import jwtDecode from 'jwt-decode'
 
