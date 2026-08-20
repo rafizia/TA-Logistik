@@ -237,4 +237,9 @@ experiment-old
 api-gateway/check-do-status.js
 
 # ai-service
-ai-service/__pycache__/
+__pycache__
+ai-service/benchmark_llm.py
+ai-service/main_zero.py
+
+#prd
+prd.md
