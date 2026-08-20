@@ -11,7 +11,7 @@ import axiosAuthInstance from '../../../utils/axios-auth-instance'
 function UpdateTrukAdmin() {
   let navigate = useNavigate()
   const location = useLocation()
-  const trukId = location.state.Id
+  const trukId = location.state?.Id || location.state?.id
   const dc_id = localStorage.getItem('dcId')
   const userRole = localStorage.getItem('userRole')
 
@@ -116,59 +116,79 @@ function UpdateTrukAdmin() {
     fetchDataTruk()
   }, [updateTrukData])
 
+  useEffect(() => {
+    if (location.state?.prefill && updateTrukData.plate_number !== null && dataDC.length > 0 && dataStatus.length > 0) {
+      const prefill = location.state.prefill
+      // console.log('Prefilling EDIT from AI:', prefill)
+
+      // Pre-fill DC
+      if (prefill.dc_id) {
+        const foundDC = dataDC.find((d) => d.value === prefill.dc_id)
+        if (foundDC) handleDCDropdownChange(foundDC)
+      }
+
+      // Pre-fill Status
+      if (prefill.status) {
+        const foundStatus = dataStatus.find((s) => s.name === prefill.status || s.name.includes(prefill.status))
+        if (foundStatus) handleStatusDropdownChange(foundStatus)
+      }
+
+    }
+  }, [location.state, updateTrukData, dataDC, dataStatus])
+
   const handleInputChange = (name, value) => {
-    setUpdateTrukData({ ...updateTrukData, [name]: value })
+    setUpdateTrukData((prev) => ({ ...prev, [name]: value }))
   }
 
   const handleTypeDropdownChange = (selectedValue) => {
-    setUpdateTrukData({
-      ...updateTrukData,
+    setUpdateTrukData((prev) => ({
+      ...prev,
       type_id: selectedValue.value,
       type: selectedValue,
       max_individual_capacity_volume: selectedValue.volume > 0 ? selectedValue.volume : ''
-    })
+    }))
   }
 
   const handleDCDropdownChange = (selectedValue) => {
     setDCDropdown(selectedValue)
-    setUpdateTrukData({
-      ...updateTrukData,
+    setUpdateTrukData((prev) => ({
+      ...prev,
       dc_id: selectedValue.value
-    })
+    }))
   }
 
   const handleStatusDropdownChange = (selectedValue) => {
     setStatusDropdown(selectedValue)
     if (selectedValue.value == 'AVAILABLE') {
-      setUpdateTrukData({
-        ...updateTrukData,
+      setUpdateTrukData((prev) => ({
+        ...prev,
         first_status: 'AVAILABLE',
-        second_status: null,
-      })
+        second_status: null
+      }))
     } else if (selectedValue.value == 'ARCHIVE') {
-      setUpdateTrukData({
-        ...updateTrukData,
+      setUpdateTrukData((prev) => ({
+        ...prev,
         first_status: 'UNAVAILABLE',
-        second_status: 'ARCHIVE',
-      })
+        second_status: 'ARCHIVE'
+      }))
     } else if (selectedValue.value == 'ON DELIVERY') {
-      setUpdateTrukData({
-        ...updateTrukData,
+      setUpdateTrukData((prev) => ({
+        ...prev,
         first_status: 'UNAVAILABLE',
-        second_status: 'ON_DELIVERY',
-      })
+        second_status: 'ON_DELIVERY'
+      }))
     } else if (selectedValue.value == 'OOS - MAINTENANCE') {
-      setUpdateTrukData({
-        ...updateTrukData,
+      setUpdateTrukData((prev) => ({
+        ...prev,
         first_status: 'UNAVAILABLE',
-        second_status: 'MAINTENANCE',
-      })
+        second_status: 'MAINTENANCE'
+      }))
     } else if (selectedValue.value == 'OOS - LEGAL') {
-      setUpdateTrukData({
-        ...updateTrukData,
+      setUpdateTrukData((prev) => ({
+        ...prev,
         first_status: 'UNAVAILABLE',
-        second_status: 'LEGAL',
-      })
+        second_status: 'LEGAL'
+      }))
     }
   }
 
@@ -178,12 +198,11 @@ function UpdateTrukAdmin() {
       updateTrukData.plate_number == null ||
       // updateTrukData.max_capacity_volume == null ||
       // updateTrukData.max_capacity_pallet == null ||
-      updateTrukData.max_individual_capacity_volume == null ||
+      // updateTrukData.max_individual_capacity_volume == null ||
       updateTrukData.dc == null ||
       updateTrukData.type == null ||
       updateTrukData.dc_id == null
     ) {
-      console.log(updateTrukData.max_capacity_volume)
       setIsOpenError(true)
       setIsError(true)
     } else {

@@ -77,29 +77,66 @@ function CreateTrukAdmin() {
       const stateData = location.state
       console.log('Prefilling from AI:', stateData)
 
+      let updatedData = { ...newTrukData }
+
       // Map plate number
       if (stateData.plate_number) {
-        handleInputChange('plate_number', stateData.plate_number)
+        updatedData.plate_number = stateData.plate_number
       }
 
       // Map Truck Type
       if (stateData.type_id) {
         const foundType = dataTipe.find((t) => t.value === stateData.type_id)
-        if (foundType) handleTypeDropdownChange(foundType)
+        if (foundType) {
+          setTipeDropdown(foundType)
+          updatedData.type_id = foundType.value
+          if (stateData.max_individual_capacity_volume) {
+            updatedData.max_individual_capacity_volume = stateData.max_individual_capacity_volume
+          }
+        }
       }
 
       // Map DC
       if (stateData.dc_id) {
         const foundDC = dataDC.find((d) => d.value === stateData.dc_id)
-        if (foundDC) handleDCDropdownChange(foundDC)
+        if (foundDC) {
+          setDCDropdown(foundDC)
+          updatedData.dc_id = foundDC.value
+        }
       }
 
-      // Map Status (Status in AI is first_status)
+      // Map Status
       if (stateData.first_status) {
-          // Status in dropdown is combined string (e.g. 'AVAILABLE', 'ON DELIVERY')
-          const foundStatus = dataStatus.find(s => s.name === stateData.first_status || s.name.includes(stateData.first_status))
-          if (foundStatus) handleStatusDropdownChange(foundStatus)
+        const foundStatus = dataStatus.find((s) => s.name === stateData.first_status || s.name.includes(stateData.first_status))
+        if (foundStatus) {
+          setStatusDropdown(foundStatus)
+          if (foundStatus.value === 'AVAILABLE') {
+            updatedData.first_status = 'AVAILABLE'
+            updatedData.second_status = null
+            updatedData.third_status = null
+          } else if (foundStatus.value === 'ARCHIVE') {
+            updatedData.first_status = 'UNAVAILABLE'
+            updatedData.second_status = 'ARCHIVE'
+            updatedData.third_status = null
+          } else if (foundStatus.value === 'ON DELIVERY') {
+            updatedData.first_status = 'UNAVAILABLE'
+            updatedData.second_status = 'ON_DELIVERY'
+            updatedData.third_status = null
+          } else if (foundStatus.value === 'OOS - MAINTENANCE') {
+            updatedData.first_status = 'UNAVAILABLE'
+            updatedData.second_status = 'OOS'
+            updatedData.third_status = 'MAINTENANCE'
+          } else if (foundStatus.value === 'OOS - LEGAL') {
+            updatedData.first_status = 'UNAVAILABLE'
+            updatedData.second_status = 'OOS'
+            updatedData.third_status = 'LEGAL'
+          }
+        }
       }
+
+      setNewTrukData(updatedData)
+      // Clear state after pre-filling to avoid re-triggering if user navigates away and back
+      window.history.replaceState({}, document.title)
     }
   }, [location.state, dataTipe, dataDC, dataStatus])
 
@@ -123,63 +160,63 @@ function CreateTrukAdmin() {
   })
 
   const handleInputChange = (name, value) => {
-    setNewTrukData({ ...newTrukData, [name]: value })
+    setNewTrukData((prev) => ({ ...prev, [name]: value }))
   }
 
   const handleTypeDropdownChange = (selectedValue) => {
     setTipeDropdown(selectedValue)
-    setNewTrukData({
-      ...newTrukData,
+    setNewTrukData((prev) => ({
+      ...prev,
       type_id: selectedValue.value,
       max_individual_capacity_volume: selectedValue.volume > 0 ? selectedValue.volume : ''
-    })
+    }))
   }
 
   const handleDCDropdownChange = (selectedValue) => {
     setDCDropdown(selectedValue)
-    setNewTrukData({
-      ...newTrukData,
+    setNewTrukData((prev) => ({
+      ...prev,
       dc_id: selectedValue.value
-    })
+    }))
   }
 
   const handleStatusDropdownChange = (selectedValue) => {
     setStatusDropdown(selectedValue)
     if (selectedValue.value === 'AVAILABLE') {
-      setNewTrukData({
-        ...newTrukData,
+      setNewTrukData((prev) => ({
+        ...prev,
         first_status: 'AVAILABLE',
         second_status: null,
         third_status: null
-      })
+      }))
     } else if (selectedValue.value === 'ARCHIVE') {
-      setNewTrukData({
-        ...newTrukData,
+      setNewTrukData((prev) => ({
+        ...prev,
         first_status: 'UNAVAILABLE',
         second_status: 'ARCHIVE',
         third_status: null
-      })
+      }))
     } else if (selectedValue.value === 'ON DELIVERY') {
-      setNewTrukData({
-        ...newTrukData,
+      setNewTrukData((prev) => ({
+        ...prev,
         first_status: 'UNAVAILABLE',
         second_status: 'ON_DELIVERY',
         third_status: null
-      })
+      }))
     } else if (selectedValue.value === 'OOS - MAINTENANCE') {
-      setNewTrukData({
-        ...newTrukData,
+      setNewTrukData((prev) => ({
+        ...prev,
         first_status: 'UNAVAILABLE',
         second_status: 'OOS',
         third_status: 'MAINTENANCE'
-      })
+      }))
     } else if (selectedValue.value === 'OOS - LEGAL') {
-      setNewTrukData({
-        ...newTrukData,
+      setNewTrukData((prev) => ({
+        ...prev,
         first_status: 'UNAVAILABLE',
         second_status: 'OOS',
         third_status: 'LEGAL'
-      })
+      }))
     }
   }
 
@@ -230,7 +267,7 @@ function CreateTrukAdmin() {
 
             <div className="flex">
               <div className="w-full">
-                <TextField label="Volume Maksimal Kendaraan (ml)" placeholder="0" className="w-full" value={newTrukData.max_individual_capacity_volume} onChange={(e) => handleInputChange('max_individual_capacity_volume', e.target.value)} isError={isError && checkAttributeNull(newTrukData.max_individual_capacity_volume)} />
+                <TextField label="Volume Maksimal Kendaraan (ml)" placeholder="0" required={true} className="w-full" value={newTrukData.max_individual_capacity_volume} onChange={(e) => handleInputChange('max_individual_capacity_volume', e.target.value)} isError={isError && checkAttributeNull(newTrukData.max_individual_capacity_volume)} />
               </div>
               {/* <div className="w-full">
                                 <TextField label="Berat Maksimal Kendaraan (kg)"className="w-full" value={pallet} disabled={true}/>

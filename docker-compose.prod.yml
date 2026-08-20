@@ -8,6 +8,7 @@ volumes:
   db_data:
   storage_uploads:
   cloudbeaver_data:
+  rabbitmq_data:
 
 services:
   # API Gateway stack
@@ -61,6 +62,8 @@ services:
       timeout: 5s
       retries: 5
     restart: always
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
     networks:
       - tms_net
     security_opt:

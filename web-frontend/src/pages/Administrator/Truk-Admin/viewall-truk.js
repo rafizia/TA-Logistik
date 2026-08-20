@@ -9,6 +9,7 @@ import axiosAuthInstance from '../../../utils/axios-auth-instance'
 function ViewAllTruksAdmin() {
   const [dataTruk, setDataTruk] = useState([])
   const [showLoading, setShowLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -23,6 +24,23 @@ function ViewAllTruksAdmin() {
         setShowLoading(false)
       })
   }, [])
+
+  const filteredData = React.useMemo(() => {
+    let result = [...dataTruk]
+
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      result = result.filter(
+        (truk) =>
+          (truk.plate_number && truk.plate_number.toLowerCase().includes(query)) ||
+          (truk.truck_type?.name && truk.truck_type.name.toLowerCase().includes(query)) ||
+          (truk.dc?.name && truk.dc.name.toLowerCase().includes(query)) ||
+          (truk.first_status && truk.first_status.toLowerCase().includes(query))
+      )
+    }
+
+    return result
+  }, [dataTruk, searchQuery])
 
   const columns = React.useMemo(
     () => [
@@ -73,7 +91,7 @@ function ViewAllTruksAdmin() {
           <div className="flex space-x-3">
             <Button
               className="bg-[#1F54A3] text-white hover:bg-[#184481] px-4 py-2 rounded-[4px] text-[14px] font-[500]"
-              label="Buat baru"
+              label="Buat Truk"
               onClick={() => navigate('/administrator/truk/buat')}
               icon={<BsPlusLg size={14} />}
             />
@@ -81,6 +99,7 @@ function ViewAllTruksAdmin() {
               className="bg-white border text-[#1F54A3] hover:bg-neutral-10 border-[#1F54A3] px-4 py-2 rounded-[4px] text-[14px] font-[500]"
               label="Unggah file"
               icon={<BsCloudUpload size={16} />}
+              onClick={() => navigate('/administrator/truk/import')}
             />
           </div>
           <div className="relative">
@@ -90,12 +109,14 @@ function ViewAllTruksAdmin() {
             <input
               type="text"
               placeholder="Cari..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10 pr-4 py-2 w-64 border rounded-[4px] focus:outline-none focus:ring-1 focus:ring-[#1F54A3] shadow-sm"
             />
           </div>
         </div>
 
-        <BaseTable columns={columns} data={dataTruk} dataLength={dataTruk.length} judul="Truk" />
+        <BaseTable columns={columns} data={filteredData} dataLength={filteredData.length} judul="Truk" />
       </div>
     </>
   )

@@ -1,21 +1,28 @@
 import os
 import json
+from sqlalchemy import text
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_ollama import ChatOllama
 from pydantic import BaseModel
 from langchain_community.utilities.sql_database import SQLDatabase
-from langchain_experimental.sql import SQLDatabaseChain
-from langchain_community.agent_toolkits import create_sql_agent
 from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_core.prompts import PromptTemplate
-from langchain.tools import tool
-from langchain_google_genai import ChatGoogleGenerativeAI
+from prompt_template import AGENT_TEMPLATE
+from prompt_template_fewshot import AGENT_TEMPLATE_FEWSHOT
+from tools import use_tools
+from langchain.agents import create_agent, AgentState
+from langchain.agents.middleware import before_model
+from langchain_core.messages import RemoveMessage, trim_messages as lc_trim_messages
+from typing import Any, Optional
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
+from langgraph.checkpoint.memory import InMemorySaver
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 app = FastAPI()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,33 +30,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-@tool
-def system_control(query: str) -> str:
-    """
-    VERY IMPORTANT: Use this tool for navigation or system actions.
-    The Action Input MUST be a valid JSON string with 'action_type' and 'target_page'.
-    Example Action Input: {"action_type": "NAVIGATE", "target_page": "trucks_list"}
-    """
-    try:
-        data = json.loads(query)
-        action_type = data.get("action_type", "NAVIGATE")
-        target_page = data.get("target_page", "dashboard")
-        return f"SUCCESS:{action_type}:{target_page}"
-    except Exception:
-        return f"SUCCESS:NAVIGATE:{query}"
-
-llm = ChatGoogleGenerativeAI(
-    model="gemini-3-flash-preview",
-    temperature=0,
-    max_tokens=None,
-    timeout=None,
-    max_retries=2,
-)
-
-#llm = ChatOllama(model="llama3.1", num_ctx=2048, base_url="http://host.docker.internal:11434")
-#llm = ChatOllama(model="llama3.1", base_url="http://host.docker.internal:11434")
-tools = [system_control]
 
 # Database configuration
 # - Inside Docker: host 'db', port 5432
@@ -61,143 +41,192 @@ if pg_uri.startswith("postgresql://"):
     pg_uri = pg_uri.replace("postgresql://", "postgresql+psycopg2://", 1)
 
 db = SQLDatabase.from_uri(pg_uri)
+
+_ollama_url   = os.getenv("OLLAMA_BASE_URL", "http://e2e_logistics_ollama:11434")
+_ollama_model = os.getenv("OLLAMA_MODEL", "qwen3.5:9b")
+llm = ChatOllama(model=_ollama_model, base_url=_ollama_url)
+
+tools   = use_tools(db)
 toolkit = SQLDatabaseToolkit(db=db, llm=llm)
 
-template = """You are a specialized Logistics Data Analyst for the 'Routing App'.
-
-SCOPE RULES:
-1. Your domain includes: Ships, Trucks, Delivery Orders, Products, Locations, and Distribution Centers.
-2. Questions about categories, counts, or details of the items above ARE allowed.
-3. If the user asks about completely unrelated topics (e.g., cooking, politics, general trivia), politely refuse in Indonesian.
-
-DO NOT make any DML statements (INSERT, UPDATE, DELETE, DROP etc.) to the database.
-
-You have access to the following tools:
-{tools}
-
-Use the following format strictly:
-
-Question: the input question you must answer
-Thought: you should always think about what to do
-Action: the action to take, should be EXACTLY one of [{tool_names}]. DO NOT append `()` to the action name.
-Action Input: the input to the action (can be empty string)
-Observation: the result of the action
-... (this Thought/Action/Action Input/Observation can repeat N times)
-Thought: I now know the final answer
-Final Answer: the final answer to the original input question
-
-CRITICAL: After providing Action and Action Input, you MUST STOP and wait. DO NOT invent an Observation. The system will provide the Observation.
-
-CATALOG OF AVAILABLE PAGES & ACTIONS:
-Pages:
-- dashboard: Main dashboard
-- shipments_list: List of all shipments
-- add_shipment: Form to add a new shipment
-- edit_shipment: Form to edit shipment details
-- delivery_orders_list: List of all delivery orders
-- add_delivery_order: Form to add a new delivery order
-- edit_delivery_order: Form to edit delivery order details
-- products_line_list: List of all products lines
-- add_product_line: Form to add a new product line
-- edit_product_line: Form to edit product line details
-- products_list: List of all products
-- add_product: Form to add a new product
-- edit_product: Form to edit product details
-- customers_list: List of all customers
-- add_customer: Form to add a new customer
-- edit_customer: Form to edit customer details
-- trucks_list: List of all trucks
-- add_truck: Form to add a new truck
-- edit_truck: Form to edit truck details
-- locations_list: List of all locations
-- add_location: Form to add a new location
-- edit_location: Form to edit location details
-- users_list: List of all users
-- add_user: Form to add a new user
-- edit_user: Form to edit user details
-- roles_list: List of all roles
-- add_role: Form to add a new role
-- edit_role: Form to edit role details
-
-Actions:
-- view_trucks: View list of trucks
-- add_new_truck: Add a new truck
-- edit_existing_truck: Edit an existing truck
-- view_orders: View list of delivery orders
-- add_new_order: Add a new delivery order
-- edit_existing_order: Edit an existing delivery order
-- view_locations: View list of locations
-- add_new_location: Add a new location
-- edit_existing_location: Edit an existing location
-- view_dashboard: View dashboard
-
-EXECUTION RULES:
-- If the user wants to "view," "open," or "show," use action_type='NAVIGATE'.
-- If the user wants to "add," "create," or "input," use action_type='ACTION'.
-
-Begin!
-
-Question: {input}
-Thought:{agent_scratchpad}
-"""
-
 PROMPT = PromptTemplate(
-    input_variables=["input", "agent_scratchpad", "tools", "tool_names"],
-    template=template
+    input_variables=["input", "agent_scratchpad", "tools", "tool_names", "history"],
+    template=AGENT_TEMPLATE
 )
 
-agent_executor = create_sql_agent(
-    llm=llm,
-    toolkit=toolkit,
-    verbose=True,
-    prompt=PROMPT,
-    extra_tools=tools,
-    agent_executor_kwargs={"return_intermediate_steps": True, "handle_parsing_errors": True}
+all_tools = tools + toolkit.get_tools()
+sys_prompt = AGENT_TEMPLATE_FEWSHOT
+memory = InMemorySaver()
+
+@before_model
+def trim_messages(state: AgentState, runtime: Any) -> dict | None:
+    """Keep only the messages that fit inside the context window based on max tokens."""
+    messages = state.get("messages", [])
+    
+    trimmed_messages = lc_trim_messages(
+        messages,
+        max_tokens=80000,
+        strategy="last",
+        token_counter="approximate",
+        start_on="human",
+        include_system=True,
+        allow_partial=False
+    )
+
+    if len(trimmed_messages) == len(messages):
+        return None
+
+    return {
+        "messages": [
+            RemoveMessage(id=REMOVE_ALL_MESSAGES),
+            *trimmed_messages
+        ]
+    }
+
+agent = create_agent(
+    model=llm,
+    tools=all_tools,
+    system_prompt=sys_prompt,
+    middleware=[trim_messages],
+    checkpointer=memory,
+    debug=False
 )
+
+class UserContext(BaseModel):
+    role: Optional[str] = None
+    dc_id: Optional[int] = None
+    dc_name: Optional[str] = None
+    token: Optional[str] = None
 
 class ChatRequest(BaseModel):
     query: str
+    session_id: str = "default_session"
+    user_context: Optional[UserContext] = None
 
 @app.post("/chat")
 async def chat_with_ai(request: ChatRequest):
     try:
-        response = agent_executor.invoke(request.query)
+        from context import request_token
+        if request.user_context and request.user_context.token:
+            request_token.set(request.user_context.token)
+        else:
+            request_token.set("")
+        input_messages = [{"role": "user", "content": request.query}]
 
-        # debug
-        print("AI response:", response)
-        
-        reply_text = response.get('output', '')
-        command_payload = None
-        
-        steps = response.get('intermediate_steps', [])
-        for action, observation in steps:
-            if getattr(action, "tool", None) == "system_control":
-                tool_input = action.tool_input
-                if isinstance(tool_input, dict):
-                    action_type = tool_input.get("action_type", "NAVIGATE")
-                    target = tool_input.get("target_page", "dashboard")
+        # Inject user context (DC info) as a system message prefix
+        if request.user_context:
+            ctx = request.user_context
+            if ctx.dc_id:
+                dc_info_parts = [f"dc_id={ctx.dc_id}"]
+                if ctx.dc_name:
+                    dc_info_parts.append(f"dc_name='{ctx.dc_name}'")
                 else:
                     try:
-                        import json
-                        parsed = json.loads(tool_input)
-                        action_type = parsed.get("action_type", "NAVIGATE")
-                        target = parsed.get("target_page", "dashboard")
+                        sql_dc = text("SELECT name FROM dc WHERE id = :dc_id")
+                        with db._engine.connect() as conn:
+                            row = conn.execute(sql_dc, {"dc_id": ctx.dc_id}).fetchone()
+                        if row:
+                            dc_info_parts.append(f"dc_name='{row[0]}'")
                     except Exception:
-                        action_type = "NAVIGATE"
-                        target = str(tool_input).strip()
-                        
-                command_payload = {
-                     "type": action_type,
-                     "target": target
-                }
-                break
-                
+                        pass
+                dc_context_msg = (
+                    f"[SYSTEM CONTEXT] The current user is logged in as role '{ctx.role or 'Admin DC'}'. "
+                    f"Their Distribution Center (DC) is fixed and CANNOT be changed: {', '.join(dc_info_parts)}. "
+                    f"When creating a delivery order, you MUST use this dc_id automatically. "
+                    f"Do NOT ask the user about which DC to use. The dc_id is already determined."
+                )
+            else:
+                dc_context_msg = (
+                    f"[SYSTEM CONTEXT] The current user is logged in as role '{ctx.role or 'Super'}'. "
+                    f"They do NOT have a fixed Distribution Center (DC). "
+                    f"When creating a delivery order, you MUST ask the user which DC they want to use."
+                )
+
+            input_messages = [
+                {"role": "system", "content": dc_context_msg},
+                {"role": "user", "content": request.query}
+            ]
+
+        config = {"configurable": {"thread_id": request.session_id}}
+
+        response = await agent.ainvoke(
+            {"messages": input_messages}, 
+            config=config
+        )
+        
+        final_messages = response.get("messages", [])     
+        reply_text = ""
+        command_payload = None
+        
+        # Iterate over messages in reverse to find the latest tool call or final answer
+        for msg in reversed(final_messages):
+            if msg.type == "tool" and msg.name in ["system_control", "manage_truck", "manage_location", "automate_shipment", "simulate_shipment", "manage_delivery_order"]:
+                # Special case: simulate_shipment returns a plain string, not a dict
+                if msg.name == "simulate_shipment":
+                    if not reply_text:
+                        reply_text = str(msg.content)
+                    break
+                # tool returned a direct dict or stringified JSON
+                try:
+                    output = msg.content
+                    if isinstance(output, str):
+                        import ast
+                        try:
+                            output = json.loads(output)
+                        except json.JSONDecodeError:
+                            output = ast.literal_eval(output)
+                    
+                    if isinstance(output, dict):
+                        ui_action = output.get("ui_action")
+                        if ui_action and ui_action != "ERROR":
+                            if not reply_text:
+                                reply_text = output.get("message", "Baik, saya akan memproses permintaan Anda.")
+                            command_payload = {
+                                "type": ui_action,
+                                "target": output.get("target", "dashboard")
+                            }
+                            if "data" in output:
+                                command_payload["data"] = output.get("data")
+                            break
+                        elif ui_action == "ERROR":
+                            if not reply_text:
+                                reply_text = output.get("message", "Terjadi kesalahan saat memproses data.")
+                            command_payload = None
+                            break
+                except Exception:
+                    pass
+            elif msg.type == "tool" and "SUCCESS:PREFILL:" in str(msg.content):
+                # Fallback for PREFILL tools
+                try:
+                    obs_str = str(msg.content).strip()
+                    parts = obs_str.split(":", 3)
+                    target = parts[2] if len(parts) > 2 else "dashboard"
+                    json_str = parts[3].strip() if len(parts) > 3 else ""
+                    payload_data = json.loads(json_str) if json_str else {}
+                    
+                    command_payload = {
+                        "type": "PREFILL",
+                        "target": target,
+                        "data": payload_data
+                    }
+                    reply_text = "Baik, saya akan menyiapkan data yang Anda minta."
+                    break
+                except Exception:
+                    pass
+            elif msg.type == "ai" and msg.content and not command_payload:
+                # Store the last AI message as the reply text, unless we already found a tool command
+                if not reply_text:
+                    reply_text = msg.content
+
         if not reply_text and command_payload:
-            reply_text = "Baik, saya akan mengarahkan Anda ke halaman truk."
+            reply_text = "Baik, saya akan mengarahkan Anda ke halaman yang relevan."
 
         return {
             "reply": reply_text,
             "command": command_payload
         }
     except Exception as e:
+        print(f"[ERROR] chat_with_ai: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return {"error": str(e)}

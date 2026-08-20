@@ -5,6 +5,8 @@ import {
   getAllDOAdminController,
   getAllDOController,
   getDOByIDController,
+  createDOController,
+  updateDOController,
 } from "../controllers/delivery-order-controller.js"; //DO
 import {
   getAllLocationsAdminController,
@@ -40,7 +42,7 @@ import {
   getAllCustomersController,
   getCustomerByIdController,
 } from "../controllers/customers-controller.js"; //CUSTOMER
-import { priorityOptimizationController } from "../controllers/optimization-controller.js"; //OPTIMIZATION
+import { priorityOptimizationController, bulkSaveShipmentController } from "../controllers/optimization-controller.js"; //OPTIMIZATION
 import {
   addBoxToDOController,
   boxDimensionCalculation,
@@ -49,9 +51,23 @@ import {
   getAllBoxesController,
   createBoxController,
 } from "../controllers/box-controller.js"; // BOX
+import {
+  getChatHistoryController,
+  saveChatMessagesController,
+  getChatSessionsController,
+  createChatSessionController,
+  deleteChatSessionController,
+} from "../controllers/chat-history-controller.js"; // CHAT HISTORY
 
 const restrictedRouter = express.Router();
 restrictedRouter.use(jwtMiddleware);
+
+// chat history
+restrictedRouter.get("/api/v1/chat-history", getChatHistoryController);
+restrictedRouter.post("/api/v1/chat-messages", saveChatMessagesController);
+restrictedRouter.get("/api/v1/chat-sessions", getChatSessionsController);
+restrictedRouter.post("/api/v1/chat-sessions", createChatSessionController);
+restrictedRouter.delete("/api/v1/chat-sessions/:sessionId", deleteChatSessionController);
 
 //user
 /**
@@ -311,6 +327,22 @@ restrictedRouter.get("/api/v1/delivery-orders", getAllDOController);
 
 /**
  * @swagger
+ * /api/v1/delivery-orders:
+ *   post:
+ *     summary: Create a new delivery order
+ *     tags: [Delivery Order]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       201:
+ *         description: Delivery Order Created
+ *       401:
+ *         description: Unauthorized
+ */
+restrictedRouter.post("/api/v1/delivery-orders", createDOController);
+
+/**
+ * @swagger
  * /api/v1/delivery-order/{doId}:
  *   get:
  *     summary: Get delivery order by ID
@@ -331,6 +363,7 @@ restrictedRouter.get("/api/v1/delivery-orders", getAllDOController);
  *         description: Delivery order not found
  */
 restrictedRouter.get("/api/v1/delivery-order/:doId", getDOByIDController);
+restrictedRouter.put("/api/v1/delivery-orders/:doId", updateDOController);
 
 //locations
 /**
@@ -812,9 +845,8 @@ restrictedRouter.patch(
  *       401:
  *         description: Unauthorized
  */
-restrictedRouter.post("/api/v1/priority-opt", priorityOptimizationController
-
-);
+restrictedRouter.post("/api/v1/priority-opt", priorityOptimizationController);
+restrictedRouter.post("/api/v1/priority-opt/bulk-save", bulkSaveShipmentController);
 
 /**
  * @swagger

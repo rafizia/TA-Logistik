@@ -11,9 +11,9 @@ import axiosAuthInstance from '../../../utils/axios-auth-instance'
 function UpdateLokasiAdmin() {
   let navigate = useNavigate()
   const { state } = useLocation()
-  const idLokasi = state?.Id
+  const idLokasi = state?.Id || state?.id
 
-  const [dataPerusahaan, setDataPerusahaan] = useState([])
+  const [dataCustomer, setDataCustomer] = useState([])
   const [dataDC, setDataDC] = useState([])
   const [showLoading, setShowLoading] = useState(true)
 
@@ -25,11 +25,12 @@ function UpdateLokasiAdmin() {
   const [isOpenSuccess, setIsOpenSuccess] = useState(false)
   const [isError, setIsError] = useState(false)
   
-  const [perusahaanDropdown, setPerusahaanDropdown] = useState(null)
+  const [customerDropdown, setCustomerDropdown] = useState(null)
   const [dcDropdown, setDCDropdown] = useState(null)
 
   const [updateLokasiData, setUpdateLokasiData] = useState({
     id: idLokasi,
+    name: null,
     latitude: null,
     longitude: null,
     address: null,
@@ -54,15 +55,15 @@ function UpdateLokasiAdmin() {
     const fetchData = async () => {
       try {
         let custData = []
-        if (dataPerusahaan.length === 0) {
+        if (dataCustomer.length === 0) {
           const custRes = await axiosAuthInstance.get('/customers?limit=1000')
           custData = custRes.data.data.customers.map((item) => ({
             value: item.id,
             name: item.name
           }))
-          setDataPerusahaan(custData)
+          setDataCustomer(custData)
         } else {
-          custData = dataPerusahaan
+          custData = dataCustomer
         }
 
         let tempDcData = []
@@ -86,24 +87,27 @@ function UpdateLokasiAdmin() {
         const oHour = `${pad(oDate.getUTCHours())}:${pad(oDate.getUTCMinutes())}`;
         const cHour = `${pad(cDate.getUTCHours())}:${pad(cDate.getUTCMinutes())}`;
 
+        const prefill = state?.prefill || {};
+
         setUpdateLokasiData({
           id: idLokasi,
-          latitude: loc.latitude,
-          longitude: loc.longitude,
-          address: loc.address,
-          provinsi: loc.provinsi,
-          kabupaten_kota: loc.kabupaten_kota,
-          kecamatan: loc.kecamatan,
-          desa_kelurahan: loc.desa_kelurahan,
-          kode_pos: loc.kode_pos,
-          open_hour: oHour,
-          close_hour: cHour,
-          customer_id: loc.customer_id,
-          dc_id: loc.dc_id
+          name: prefill.name !== undefined ? prefill.name : loc.name,
+          latitude: prefill.latitude !== undefined ? prefill.latitude : loc.latitude,
+          longitude: prefill.longitude !== undefined ? prefill.longitude : loc.longitude,
+          address: prefill.address !== undefined ? prefill.address : loc.address,
+          provinsi: prefill.provinsi !== undefined ? prefill.provinsi : loc.provinsi,
+          kabupaten_kota: prefill.kabupaten_kota !== undefined ? prefill.kabupaten_kota : loc.kabupaten_kota,
+          kecamatan: prefill.kecamatan !== undefined ? prefill.kecamatan : loc.kecamatan,
+          desa_kelurahan: prefill.desa_kelurahan !== undefined ? prefill.desa_kelurahan : loc.desa_kelurahan,
+          kode_pos: prefill.kode_pos !== undefined ? prefill.kode_pos : loc.kode_pos,
+          open_hour: prefill.open_hour !== undefined ? prefill.open_hour : oHour,
+          close_hour: prefill.close_hour !== undefined ? prefill.close_hour : cHour,
+          customer_id: prefill.customer_id !== undefined ? prefill.customer_id : loc.customer_id,
+          dc_id: prefill.dc_id !== undefined ? prefill.dc_id : loc.dc_id
         })
 
         if (loc.customer) {
-          setPerusahaanDropdown({ name: loc.customer.name, value: loc.customer.id })
+          setCustomerDropdown({ name: loc.customer.name, value: loc.customer.id })
         }
         if (loc.dc) {
           setDCDropdown({ name: loc.dc.name, value: loc.dc.id })
@@ -121,19 +125,20 @@ function UpdateLokasiAdmin() {
   }, [idLokasi])
 
   const handleInputChange = (name, value) => {
-    setUpdateLokasiData({ ...updateLokasiData, [name]: value })
+    setUpdateLokasiData(prev => ({ ...prev, [name]: value }))
   }
 
   const handleDCDropdownChange = (selectedValue) => {
     setDCDropdown(selectedValue)
-    setUpdateLokasiData({
-      ...updateLokasiData,
+    setUpdateLokasiData(prev => ({
+      ...prev,
       dc_id: selectedValue.value
-    })
+    }))
   }
 
   const handleSubmit = () => {
     if (
+      updateLokasiData.name === null ||
       updateLokasiData.address === null ||
       updateLokasiData.provinsi === null ||
       updateLokasiData.kabupaten_kota === null ||
@@ -191,6 +196,8 @@ function UpdateLokasiAdmin() {
           <h4>Masukan Data Lokasi</h4>
           <div className="pt-4 space-y-4">
             
+            <TextField label="Nama Lokasi" placeholder="Toko ABC..." required={true} className="w-full" value={updateLokasiData.name || ""} onChange={(e) => handleInputChange('name', e.target.value)} isError={isError && checkAttributeNull(updateLokasiData.name)} />
+
             <TextField label="Alamat Lokasi" placeholder="Jl. Raya..." required={true} className="w-full" value={updateLokasiData.address || ""} onChange={(e) => handleInputChange('address', e.target.value)} isError={isError && checkAttributeNull(updateLokasiData.address)} />
 
             <div className="flex gap-4">
@@ -224,9 +231,9 @@ function UpdateLokasiAdmin() {
               <TextField label="Kode Pos" placeholder="12345" required={true} className="w-full" value={updateLokasiData.kode_pos || ""} onChange={(e) => handleInputChange('kode_pos', e.target.value)} isError={isError && checkAttributeNull(updateLokasiData.kode_pos)} />
             </div>
 
-            {/* Asal perusahaan didisable sehingga tidak bisa diubah */}
+            {/* Asal customer didisable sehingga tidak bisa diubah */}
             <div className="pointer-events-none opacity-60 w-full">
-              <Dropdown placeholder="Pilih Perusahaan" label="Perusahaan " data={dataPerusahaan} className="w-full" required={true} value={perusahaanDropdown} onChange={() => {}} disabled={true} />
+              <Dropdown placeholder="Pilih Customer" label="Customer " data={dataCustomer} className="w-full" required={true} value={customerDropdown} onChange={() => {}} disabled={true} />
             </div>
 
             <div className="flex gap-4">
