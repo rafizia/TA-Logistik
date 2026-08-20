@@ -335,7 +335,8 @@ export function useChat(navigate) {
         },
       });
 
-      const aiReply = data.reply || 'Respons tidak tersedia.';
+      const rawReply = data.reply || 'Respons tidak tersedia.';
+      const aiReply = typeof rawReply === 'string' ? rawReply : JSON.stringify(rawReply);
 
       if (data.command) {
         const { target } = data.command;

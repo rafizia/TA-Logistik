@@ -47,41 +47,37 @@ function ViewAllLokasiAdmin() {
   const columns = React.useMemo(() => [
     {
       Header: 'No',
+      accessor: 'no',
+      Filter: SelectColumnFilter,
+      filter: 'includes',
+      width: 'w-[60px] min-w-[60px]',
+    },
+    {
+      Header: 'Nama Lokasi',
       accessor: 'name',
       Filter: SelectColumnFilter,
       filter: 'includes',
-      width: 'min-w-[100px]',
-    },
-    {
-      Header: 'Nama Customer',
-      accessor: 'customer.name',
-      Filter: SelectColumnFilter,
-      filter: 'includes',
-      width: 'min-w-[250px]',
+      width: 'w-[200px] min-w-[180px]',
     },
     {
       Header: 'Alamat Lokasi',
       accessor: 'address',
       Filter: SelectColumnFilter,
       filter: 'includes',
-      width: 'min-w-[250px]',
+      width: 'w-[450px] min-w-[400px]',
     },
     {
-      Header: 'Provinsi',
-      accessor: 'provinsi',
+      Header: 'Nama Customer',
+      accessor: 'customer.name',
       Filter: SelectColumnFilter,
       filter: 'includes',
-    },
-    {
-      Header: 'Kota/Kabupaten',
-      accessor: 'kabupaten_kota',
-      Filter: SelectColumnFilter,
-      filter: 'includes',
+      width: 'w-[200px] min-w-[180px]',
     },
     {
       Header: 'Action',
       accessor: (row) => ['Lokasi', row.id],
-      Cell: ActionButtons
+      Cell: ActionButtons,
+      width: 'w-[100px] min-w-[80px]',
     },
   ], []);
 
@@ -125,7 +121,6 @@ function ViewAllLokasiAdmin() {
           onPageChange={handlePageChange}
           onPageSizeChange={handlePageSizeChange}
           loading={loading}
-          judul={'Daftar Lokasi'}
           showEdit={true}
           onEdit={(id) => navigate('/administrator/lokasi/update', { state: { Id: id } })}
         />

@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_ollama import ChatOllama
+from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel
 from langchain_community.utilities.sql_database import SQLDatabase
 from langchain_community.agent_toolkits import SQLDatabaseToolkit
@@ -42,9 +43,20 @@ if pg_uri.startswith("postgresql://"):
 
 db = SQLDatabase.from_uri(pg_uri)
 
+'''
 _ollama_url   = os.getenv("OLLAMA_BASE_URL", "http://e2e_logistics_ollama:11434")
 _ollama_model = os.getenv("OLLAMA_MODEL", "qwen3.5:9b")
-llm = ChatOllama(model=_ollama_model, base_url=_ollama_url)
+llm = ChatOllama(model=_ollama_model, base_url=_ollama_url, num_ctx=4096, keep_alive="5m")
+
+'''
+# Google Gemini API configuration:
+google_api_key = os.getenv("GOOGLE_API_KEY")
+llm = ChatGoogleGenerativeAI(
+    model="gemini-3.5-flash-lite",
+    google_api_key=google_api_key,
+    temperature=0
+)
+
 
 tools   = use_tools(db)
 toolkit = SQLDatabaseToolkit(db=db, llm=llm)
@@ -153,10 +165,39 @@ async def chat_with_ai(request: ChatRequest):
             {"messages": input_messages}, 
             config=config
         )
+
+        # 🟢 LOG TRACE BERPIKIR & TOOL CALL KE TERMINAL
+        print("\n" + "="*50)
+        print("🧠 --- TRACE EKSEKUSI AI ---")
+        for msg in response.get("messages", []):
+            if msg.type == "ai":
+                if getattr(msg, "tool_calls", None):
+                    print(f"🤖 [AI CALL TOOL]: {msg.tool_calls}")
+                elif msg.content:
+                    print(f"🤖 [AI THINKING/REPLY]: {msg.content}")
+            elif msg.type == "tool":
+                print(f"🛠️ [TOOL RESULT ({msg.name})]: {msg.content}")
+        print("="*50 + "\n")
         
-        final_messages = response.get("messages", [])     
+        final_messages = response.get("messages", [])
         reply_text = ""
         command_payload = None
+
+        def _content_to_str(content) -> str:
+            """Normalise AI message content (str | list[dict]) → plain string."""
+            if isinstance(content, str):
+                return content
+            if isinstance(content, list):
+                parts = []
+                for part in content:
+                    if isinstance(part, str):
+                        parts.append(part)
+                    elif isinstance(part, dict):
+                        parts.append(part.get("text") or str(part))
+                    else:
+                        parts.append(str(part))
+                return "".join(parts)
+            return str(content)
         
         # Iterate over messages in reverse to find the latest tool call or final answer
         for msg in reversed(final_messages):
@@ -179,18 +220,18 @@ async def chat_with_ai(request: ChatRequest):
                     if isinstance(output, dict):
                         ui_action = output.get("ui_action")
                         if ui_action and ui_action != "ERROR":
-                            if not reply_text:
-                                reply_text = output.get("message", "Baik, saya akan memproses permintaan Anda.")
+                            reply_text = output.get("message", "Baik, saya akan memproses permintaan Anda.")
                             command_payload = {
                                 "type": ui_action,
                                 "target": output.get("target", "dashboard")
                             }
-                            if "data" in output:
+                            if "entity_id" in output and output["entity_id"] is not None:
+                                command_payload["data"] = {"id": output["entity_id"], "Id": output["entity_id"]}
+                            elif "data" in output and output["data"] is not None:
                                 command_payload["data"] = output.get("data")
                             break
                         elif ui_action == "ERROR":
-                            if not reply_text:
-                                reply_text = output.get("message", "Terjadi kesalahan saat memproses data.")
+                            reply_text = output.get("message", "Terjadi kesalahan saat memproses data.")
                             command_payload = None
                             break
                 except Exception:
@@ -216,7 +257,7 @@ async def chat_with_ai(request: ChatRequest):
             elif msg.type == "ai" and msg.content and not command_payload:
                 # Store the last AI message as the reply text, unless we already found a tool command
                 if not reply_text:
-                    reply_text = msg.content
+                    reply_text = _content_to_str(msg.content)
 
         if not reply_text and command_payload:
             reply_text = "Baik, saya akan mengarahkan Anda ke halaman yang relevan."
@@ -230,3 +271,4 @@ async def chat_with_ai(request: ChatRequest):
         import traceback
         traceback.print_exc()
         return {"error": str(e)}
+

@@ -8,6 +8,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools.system_control import system_control
 from tools.manage_truck import get_manage_truck_tool
+from tools.manage_location import get_manage_location_tool
+from tools.manage_delivery_order import get_manage_delivery_order_tool
 
 
 class TestSystemControl:
@@ -159,3 +161,168 @@ class TestManageTruck:
         })
         assert result["status"] == "error"
         assert "not allowed to be updated" in result["message"]
+
+
+class TestManageLocation:
+    @pytest.fixture
+    def mock_db(self):
+        db = MagicMock()
+        def mock_run(query: str):
+            if "customer" in query:
+                return "[(1, 'PT ABC'), (2, 'PT XYZ')]"
+            if "dc" in query:
+                return "[(1, 'DC Jakarta'), (2, 'DC Surabaya')]"
+            return "[]"
+        db.run.side_effect = mock_run
+        return db
+
+    @pytest.fixture
+    def manage_location_tool(self, mock_db):
+        return get_manage_location_tool(mock_db)
+
+    def test_create_location(self, manage_location_tool):
+        data_input = {
+            "action": "CREATE",
+            "data": {
+                "name": "Toko ABC",
+                "address": "Jl. Merdeka 1",
+                "provinsi": "DKI Jakarta",
+                "kabupaten_kota": "Jakarta Pusat",
+                "kecamatan": "Gambir",
+                "desa_kelurahan": "Gambir",
+                "kode_pos": "10110",
+                "open_hour": "08:00",
+                "close_hour": "17:00",
+                "customer_id": 1,
+                "dc_id": 1
+            }
+        }
+        result = manage_location_tool.invoke(data_input)
+        assert result["status"] == "success"
+        assert result["ui_action"] == "PREFILL"
+        assert result["target"] == "add_location"
+        assert result["data"]["name"] == "Toko ABC"
+
+    def test_create_location_with_name_resolution(self, manage_location_tool):
+        data_input = {
+            "action": "CREATE",
+            "data": {
+                "name": "Toko XYZ",
+                "address": "Jl. Sudirman 2",
+                "provinsi": "DKI Jakarta",
+                "kabupaten_kota": "Jakarta Pusat",
+                "kecamatan": "Gambir",
+                "desa_kelurahan": "Gambir",
+                "kode_pos": "10110",
+                "open_hour": "08:00",
+                "close_hour": "17:00",
+                "customer_name": "PT ABC",
+                "dc_name": "DC Jakarta"
+            }
+        }
+        result = manage_location_tool.invoke(data_input)
+        assert result["status"] == "success"
+        assert result["data"]["customer_id"] == 1
+        assert result["data"]["dc_id"] == 1
+
+    def test_create_location_missing_required(self, manage_location_tool):
+        data_input = {
+            "action": "CREATE",
+            "data": {
+                "name": "Toko ABC",
+                "address": "Jl. Merdeka 1"
+            }
+        }
+        result = manage_location_tool.invoke(data_input)
+        assert result["status"] == "error"
+        assert "Missing required fields" in result["message"]
+
+    def test_update_location(self, manage_location_tool):
+        data_input = {
+            "action": "UPDATE",
+            "data": {
+                "id": 10,
+                "name": "Toko ABC Updated"
+            }
+        }
+        result = manage_location_tool.invoke(data_input)
+        assert result["status"] == "success"
+        assert result["ui_action"] == "PREFILL"
+        assert result["target"] == "edit_location"
+        assert result["data"]["Id"] == 10
+
+
+class TestManageDeliveryOrder:
+    @pytest.fixture
+    def mock_db(self):
+        db = MagicMock()
+        def mock_run(query: str):
+            if "customer" in query:
+                return "[(1, 'PT ABC'), (2, 'PT XYZ')]"
+            if "FROM dc" in query or "SELECT id, name FROM dc" in query:
+                return "[(1, 'DC Jakarta'), (2, 'DC Surabaya')]"
+            if "product" in query:
+                return "[(1, 'Produk A'), (2, 'Produk B')]"
+            return "[]"
+        db.run.side_effect = mock_run
+        return db
+
+    @pytest.fixture
+    def manage_do_tool(self, mock_db):
+        return get_manage_delivery_order_tool(mock_db)
+
+    def test_create_delivery_order(self, manage_do_tool):
+        data_input = {
+            "action": "CREATE",
+            "data": {
+                "so_origin": "SO-001",
+                "delivery_order_num": "DO-001",
+                "eta_target": "2026-06-13T08:00:00",
+                "status": "READY",
+                "dc_id": 1,
+                "customer_id": 2
+            }
+        }
+        result = manage_do_tool.invoke(data_input)
+        assert result["status"] == "success"
+        assert result["ui_action"] == "PREFILL"
+        assert result["target"] == "add_delivery_order"
+        assert result["data"]["delivery_order_num"] == "DO-001"
+
+    def test_create_delivery_order_with_name_resolution(self, manage_do_tool):
+        data_input = {
+            "action": "CREATE",
+            "data": {
+                "so_origin": "SO-002",
+                "delivery_order_num": "DO-002",
+                "eta_target": "2026-06-13T08:00:00",
+                "status": "READY",
+                "dc_name": "DC Jakarta",
+                "customer_name": "PT ABC",
+                "product_lines": [
+                    {"product_name": "Produk A", "quantity": 5}
+                ]
+            }
+        }
+        result = manage_do_tool.invoke(data_input)
+        assert result["status"] == "success"
+        assert result["data"]["dc_id"] == 1
+        assert result["data"]["customer_id"] == 1
+        assert result["data"]["product_lines"][0]["product_id"] == 1
+
+    def test_update_delivery_order(self, manage_do_tool):
+        data_input = {
+            "action": "UPDATE",
+            "data": {
+                "id": 5,
+                "status": "DONE"
+            }
+        }
+        result = manage_do_tool.invoke(data_input)
+        assert result["status"] == "success"
+        assert result["ui_action"] == "PREFILL"
+        assert result["target"] == "edit_delivery_order"
+        assert result["data"]["id"] == 5
+        assert result["data"]["status"] == "DONE"
+
+
