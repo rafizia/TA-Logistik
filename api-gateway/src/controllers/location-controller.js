@@ -108,6 +108,7 @@ const createLocationController = async (request, response, next) => {
     const role = request.decodedToken.role;
     if (role.name == "Super" && role.is_allowed_location) {
       const {
+        name,
         latitude,
         longitude,
         address,
@@ -136,6 +137,7 @@ const createLocationController = async (request, response, next) => {
         created_by: request.decodedToken.userId || role.name,
       };
 
+      if (name !== undefined) newLocationData.name = name;
       if (customer_id) newLocationData.customer_id = parseInt(customer_id);
       if (dc_id) newLocationData.dc_id = parseInt(dc_id);
 
@@ -155,6 +157,7 @@ const updateLocationController = async (request, response, next) => {
     if (role.name == "Super" && role.is_allowed_location) {
       const {
         id,
+        name,
         latitude,
         longitude,
         address,
@@ -165,6 +168,7 @@ const updateLocationController = async (request, response, next) => {
         kode_pos,
         open_hour,
         close_hour,
+        customer_id,
         dc_id
       } = request.body;
 
@@ -172,6 +176,7 @@ const updateLocationController = async (request, response, next) => {
         updated_by: request.decodedToken.userId || role.name,
       };
 
+      if (name !== undefined) updatedLocationData.name = name;
       if (latitude !== undefined && latitude !== null) updatedLocationData.latitude = parseFloat(latitude);
       if (longitude !== undefined && longitude !== null) updatedLocationData.longitude = parseFloat(longitude);
       if (address !== undefined) updatedLocationData.address = address;
@@ -182,7 +187,8 @@ const updateLocationController = async (request, response, next) => {
       if (kode_pos !== undefined && kode_pos !== null) updatedLocationData.kode_pos = parseInt(kode_pos);
       if (open_hour !== undefined) updatedLocationData.open_hour = new Date(`1970-01-01T${open_hour}:00Z`);
       if (close_hour !== undefined) updatedLocationData.close_hour = new Date(`1970-01-01T${close_hour}:00Z`);
-      if (dc_id) updatedLocationData.dc_id = parseInt(dc_id);
+      if (customer_id !== undefined && customer_id !== null) updatedLocationData.customer_id = parseInt(customer_id);
+      if (dc_id !== undefined && dc_id !== null) updatedLocationData.dc_id = parseInt(dc_id);
 
       const result = await updateLocationService(id, updatedLocationData);
       response.status(200).json(HTTPResponse(true, 200, "Success", result, null));

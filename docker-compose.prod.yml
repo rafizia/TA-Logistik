@@ -89,6 +89,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      api_gateway:
+        condition: service_started
     restart: always
     networks:
       tms_net: {}

@@ -10,27 +10,18 @@ Follow these reasoning and tool-calling patterns strictly.
 ---
 [Example 1: Page Navigation]
 User: "Tolong arahkan saya ke halaman daftar truk."
-Thought: Pengguna ingin diarahkan ke halaman daftar truk. Saya perlu menggunakan tool system_control dengan action NAVIGATE ke trucks_list.
-Action: system_control(action_type="NAVIGATE", target_page="trucks_list")
+Thought: Pengguna ingin diarahkan ke halaman daftar truk. Saya perlu menggunakan tool system_control ke target_page trucks_list.
+Action: system_control(target_page="trucks_list")
 Result: {"ui_action": "NAVIGATE", "target": "trucks_list", "message": "Mengarahkan Anda ke halaman trucks list..."}
+Final Answer: Mengarahkan Anda ke halaman daftar truk.
 
 ---
-[Example 2: Creating a New Truck - Need to Find ID First]
+[Example 2: Creating a New Truck]
 User: "Buat truk baru dengan plat B 1234 AB, tipe Blind Van, di DC Jakarta, volume 1500000."
-Thought: Pengguna ingin membuat truk baru. Saya perlu mencari type_id untuk "Blind Van" dan dc_id untuk "DC Jakarta" terlebih dahulu. Saya harus memanggil get_available_options.
-Action: get_available_options(query="")
-Observation: {"vehicle_types": "[(1, 'CDD'), (2, 'Blind Van'), (3, 'CDE')]", "distribution_centers": "[(1, 'DC Bandung'), (2, 'DC Jakarta')]", ...}
-Thought: Dari hasil get_available_options, Blind Van memiliki type_id=2 dan DC Jakarta memiliki dc_id=2. Sekarang saya bisa membuat truk.
-Action: manage_truck(query={"action": "CREATE", "data": [{"plate_number": "B 1234 AB", "type_id": 2, "dc_id": 2, "max_individual_capacity_volume": 1500000, "first_status": "AVAILABLE"}]})
-Result: {"ui_action": "PREFILL", "target": "bulk_add_truck", "data": [...], "message": "Data truk telah disiapkan..."}
+Thought: Pengguna ingin membuat truk baru. manage_truck sudah bisa menerima type_name dan dc_name langsung — tidak perlu memanggil get_available_options terlebih dahulu. Saya langsung memanggil manage_truck.
+Action: manage_truck(action="CREATE", data=[{"plate_number": "B 1234 AB", "type_name": "Blind Van", "dc_name": "DC Jakarta", "max_individual_capacity_volume": 1500000, "first_status": "AVAILABLE"}])
+Result: {"status": "success", "ui_action": "PREFILL", "target": "bulk_add_truck", "data": [...], "message": "Data truk telah disiapkan..."}
 Final Answer: Data truk telah disiapkan. Silakan periksa dan simpan di halaman review yang akan dibuka.
-
----
-[Example 3: Deleting a Truck]
-User: "Hapus truk dengan plat D 9999 XX."
-Thought: Pengguna ingin menghapus truk berdasarkan plat nomor. Saya langsung menggunakan manage_truck dengan action DELETE.
-Action: manage_truck(query={"action": "DELETE", "data": {"plate_number": "D 9999 XX"}})
-Result: {"ui_action": "NAVIGATE", "target": "trucks_list", "message": "Truk D 9999 XX berhasil dihapus."}
 
 ---
 [Example 4: Database Query - Counting the Number of]
@@ -64,17 +55,23 @@ Result: {"ui_action": "PREFILL", "target": "automate_shipment", "data": {...}, "
 [Example 7: Truck Update - Single]
 User: "Ubah status truk B 5678 CD menjadi UNAVAILABLE."
 Thought: Pengguna ingin mengubah status satu truk. Saya menggunakan manage_truck dengan action UPDATE. Data HARUS berupa list meskipun hanya satu truk.
-Action: manage_truck(query={"action": "UPDATE", "data": [{"plate_number": "B 5678 CD", "first_status": "UNAVAILABLE"}]})
-Result: {"ui_action": "PREFILL", "target": "bulk_edit_truck", "data": [...], "message": "Data truk siap diedit."}
-Final Answer: Data truk siap diedit. Halaman review perbarui truk akan dibuka, silakan periksa dan klik "Perbarui Semua" untuk menyimpan perubahan.
+Action: manage_truck(action="UPDATE", data=[{"plate_number": "B 5678 CD", "first_status": "UNAVAILABLE"}])
+Result: {"status": "success", "ui_action": "PREFILL", "target": "bulk_edit_truck", "data": [...], "message": "Data truk telah siap untuk diedit."}
+Final Answer: Data truk telah disiapkan untuk diperbarui. Halaman review akan dibuka, silakan periksa dan simpan perubahan.
 
 ---
 [Example 7b: Truck Update - Bulk]
 User: "Ubah DC truk B 1234 AB dan D 5678 CD ke DC Jakarta, dan ubah status truk A 9999 ZZ menjadi UNAVAILABLE."
 Thought: Pengguna ingin mengubah beberapa truk sekaligus (bulk update). Saya menggunakan manage_truck dengan action UPDATE dan data sebagai LIST berisi semua truk yang akan diubah.
-Action: manage_truck(query={"action": "UPDATE", "data": [{"plate_number": "B 1234 AB", "dc_name": "DC Jakarta"}, {"plate_number": "D 5678 CD", "dc_name": "DC Jakarta"}, {"plate_number": "A 9999 ZZ", "first_status": "UNAVAILABLE"}]})
-Result: {"ui_action": "PREFILL", "target": "bulk_edit_truck", "data": [...], "message": "Data truk siap diedit."}
-Final Answer: Data 3 truk telah disiapkan untuk diperbarui. Halaman review akan dibuka, silakan periksa dan klik "Perbarui Semua" untuk menyimpan perubahan.
+Action: manage_truck(action="UPDATE", data=[{"plate_number": "B 1234 AB", "dc_name": "DC Jakarta"}, {"plate_number": "D 5678 CD", "dc_name": "DC Jakarta"}, {"plate_number": "A 9999 ZZ", "first_status": "UNAVAILABLE"}])
+Result: {"status": "success", "ui_action": "PREFILL", "target": "bulk_edit_truck", "data": [...], "message": "Data truk telah siap untuk diedit."}
+Final Answer: Data 3 truk telah disiapkan untuk diperbarui. Halaman review akan dibuka, silakan periksa dan simpan perubahan.
+
+---
+[Example 7c: Truck Update - Attempt to Change Non-Allowed Field]
+User: "Ubah tipe truk B 1234 CD menjadi CDD."
+Thought: Pengguna ingin mengubah tipe truk. Namun, tipe truk, plat nomor, dan kapasitas volume adalah field yang tidak boleh diubah pada aksi UPDATE. Hanya DC (dc_name/dc_id), first_status, dan second_status yang boleh diubah. Saya harus menolak dan menjelaskan kepada pengguna tanpa memanggil tool.
+Final Answer: Maaf, tipe truk tidak dapat diubah setelah truk dibuat. Untuk data truk, field yang dapat diperbarui hanya Distribution Center (DC), status utama (first_status), dan status kedua (second_status).
 
 ---
 [Example 8: Shipping Automation with Specific Delivery Order IDs]

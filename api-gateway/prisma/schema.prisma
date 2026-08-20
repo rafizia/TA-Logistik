@@ -43,20 +43,20 @@ model DC {
 }
 
 model User {
-  id           String    @id @default(uuid())
-  username     String    @db.VarChar(100)
-  password     String    @db.VarChar(100)
-  first_name   String    @db.VarChar(100)
-  last_name    String    @db.VarChar(100)
-  phone_num    String?   @db.VarChar(100)
-  email        String?   @db.VarChar(100)
+  id           String        @id @default(uuid())
+  username     String        @db.VarChar(100)
+  password     String        @db.VarChar(100)
+  first_name   String        @db.VarChar(100)
+  last_name    String        @db.VarChar(100)
+  phone_num    String?       @db.VarChar(100)
+  email        String?       @db.VarChar(100)
   web_token    String?
   mobile_token String?
-  is_active    Boolean   @default(true)
-  created_at   DateTime  @default(now()) @db.Timestamptz(3)
-  updated_at   DateTime? @updatedAt @db.Timestamptz(3)
-  is_deleted   Boolean   @default(false)
-  deleted_at   DateTime? @db.Timestamptz(3)
+  is_active    Boolean       @default(true)
+  created_at   DateTime      @default(now()) @db.Timestamptz(3)
+  updated_at   DateTime?     @updatedAt @db.Timestamptz(3)
+  is_deleted   Boolean       @default(false)
+  deleted_at   DateTime?     @db.Timestamptz(3)
   role_id      Int?
   role         Role?         @relation(fields: [role_id], references: [id])
   ChatSession  ChatSession[]
@@ -88,6 +88,7 @@ model Location {
   id                   String             @id @default(uuid())
   latitude             Float
   longitude            Float
+  name                 String?            @db.VarChar(200)
   address              String
   provinsi             String
   kabupaten_kota       String
@@ -375,4 +376,3 @@ model ChatMessage {
 
   @@map("chat_message")
 }
-

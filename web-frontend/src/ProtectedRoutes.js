@@ -6,9 +6,11 @@ import jwtDecode from 'jwt-decode';
 import { default as Sidebar } from './components/Sidebar';
 import SidebarAdmin from './components/SidebarAdmin';
 
-import { SystemDesign, Login, Dashboard, ViewAllLokasi, ViewAllTruksAdmin, NotFound, ViewAllTrucks, DashboardAdmin, 
-    ViewAllLokasiAdmin, ViewAllUserAdmin, ViewAllRoleAdmin, ViewLokasiAdmin, ViewAllProdukAdmin, 
-    ViewAllProduk, ViewLocation, ViewAllProductLineAdmin, ViewAllProductLine, CreateTrukAdmin, UpdateTrukAdmin, CreateLokasiAdmin, UpdateLokasiAdmin, ImportTruk, BulkCreateTruk, BulkUpdateTruk } from './pages';
+import {
+  SystemDesign, Login, Dashboard, ViewAllLokasi, ViewAllTruksAdmin, NotFound, ViewAllTrucks, DashboardAdmin,
+  ViewAllLokasiAdmin, ViewAllUserAdmin, ViewAllRoleAdmin, ViewLokasiAdmin, ViewAllProdukAdmin,
+  ViewAllProduk, ViewLocation, ViewAllProductLineAdmin, ViewAllProductLine, CreateTrukAdmin, UpdateTrukAdmin, CreateLokasiAdmin, UpdateLokasiAdmin, ImportTruk, BulkCreateTruk, BulkUpdateTruk
+} from './pages';
 
 import PrivateRoute from './utils/private-route';
 
@@ -36,7 +38,7 @@ function ProtectedRoutes() {
       navigate('/login');
       return;
     }
-  
+
     try {
       const decodedToken = jwtDecode(tokenFromSession);
       setUserRole(decodedToken.role.name);
@@ -45,12 +47,12 @@ function ProtectedRoutes() {
       navigate('/login');
     }
   }, [navigate]);
-  
+
   useEffect(() => {
     if (userRole && location.pathname === '/') {
       navigate(userRole === 'Super' ? '/administrator/dashboard' : '/dashboard');
     }
-  }, [userRole, location.pathname, navigate]);  
+  }, [userRole, location.pathname, navigate]);
 
   return (
     <Routes>
@@ -64,7 +66,7 @@ function ProtectedRoutes() {
           <Route path="/administrator/user" element={<PrivateRoute><SidebarAdmin user={true} title="Daftar User"><ViewAllUserAdmin /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/role" element={<PrivateRoute><SidebarAdmin role={true} title="Daftar Role"><ViewAllRoleAdmin /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/truk" element={<PrivateRoute><SidebarAdmin truk={true} title="Daftar Truk"><ViewAllTruksAdmin /></SidebarAdmin></PrivateRoute>} />
-          <Route path="/administrator/lokasi" element={<PrivateRoute><SidebarAdmin lokasi={true} title="Daftar Lokasi"><ViewAllLokasiAdmin /></SidebarAdmin></PrivateRoute>} />
+          <Route path="/administrator/lokasi" element={<PrivateRoute><SidebarAdmin lokasi={true} title="Lokasi"><ViewAllLokasiAdmin /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/lokasi/buat" element={<PrivateRoute><SidebarAdmin lokasi={true} title="Buat Lokasi"><CreateLokasiAdmin /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/lokasi/update" element={<PrivateRoute><SidebarAdmin lokasi={true} title="Ubah Lokasi"><UpdateLokasiAdmin /></SidebarAdmin></PrivateRoute>} />
           <Route path="/administrator/product" element={<PrivateRoute><SidebarAdmin product={true} title="Daftar Product"><ViewAllProdukAdmin /></SidebarAdmin></PrivateRoute>} />
@@ -96,7 +98,7 @@ function ProtectedRoutes() {
           <Route path="/truk/import" element={<PrivateRoute><Sidebar truk={true} title="Unggah Data Truk"><ImportTruk /></Sidebar></PrivateRoute>} />
           <Route path="/truk/bulk-buat" element={<PrivateRoute><Sidebar truk={true} title="Buat Truk"><BulkCreateTruk /></Sidebar></PrivateRoute>} />
           <Route path="/truk/bulk-ubah" element={<PrivateRoute><Sidebar truk={true} title="Perbarui Truk"><BulkUpdateTruk /></Sidebar></PrivateRoute>} />
-          <Route path="/lokasi" element={<PrivateRoute><Sidebar lokasi={true} title="Daftar Lokasi"><ViewAllLokasi /></Sidebar></PrivateRoute>} />
+          <Route path="/lokasi" element={<PrivateRoute><Sidebar lokasi={true} title="Lokasi"><ViewAllLokasi /></Sidebar></PrivateRoute>} />
           <Route path="/lokasi/buat" element={<PrivateRoute><Sidebar lokasi={true} title="Buat Lokasi"><CreateLokasiAdmin /></Sidebar></PrivateRoute>} />
           <Route path="/lokasi/update" element={<PrivateRoute><Sidebar lokasi={true} title="Ubah Lokasi"><UpdateLokasiAdmin /></Sidebar></PrivateRoute>} />
           <Route path="/lokasi/:lokasiId" element={<PrivateRoute><Sidebar lokasi={true} title="Detail Lokasi"><ViewLocation /></Sidebar></PrivateRoute>} />
@@ -111,9 +113,9 @@ function ProtectedRoutes() {
           <Route path="/pengiriman/select-do-automate" element={<PrivateRoute><Sidebar shipment={true} title="Otomatisasi Pengiriman"><DoSelectAutomate /></Sidebar></PrivateRoute>} />
           <Route path="/pengiriman/select-do-manual" element={<PrivateRoute><Sidebar shipment={true} title="Pengiriman Manual"><DoSelectManual /></Sidebar></PrivateRoute>} />
           <Route path="/product-line" element={<PrivateRoute><Sidebar productLine={true} title="Daftar Product Line"><ViewAllProductLine /></Sidebar></PrivateRoute>} />
-          
-          {/* visualisasi pengiriman */}        
-          <Route path="/pengiriman/visualisasi/:idShipment" element={<PrivateRoute><Sidebar pengiriman={true} title="Visualisasi Pengiriman"><VisualizationShipment /></Sidebar></PrivateRoute>} /> 
+
+          {/* visualisasi pengiriman */}
+          <Route path="/pengiriman/visualisasi/:idShipment" element={<PrivateRoute><Sidebar pengiriman={true} title="Visualisasi Pengiriman"><VisualizationShipment /></Sidebar></PrivateRoute>} />
           {/* <Route path="/pengiriman/visualisasi" element={<PrivateRoute><VisualizationShipment /></PrivateRoute>} />  */}
         </>
       )}
