@@ -118,11 +118,12 @@ class ChatRequest(BaseModel):
 @app.post("/chat")
 async def chat_with_ai(request: ChatRequest):
     try:
-        from context import request_token
+        from context import request_token, request_dc_id
         if request.user_context and request.user_context.token:
             request_token.set(request.user_context.token)
         else:
             request_token.set("")
+        request_dc_id.set(request.user_context.dc_id if request.user_context else None)
         input_messages = [{"role": "user", "content": request.query}]
 
         # Inject user context (DC info) as a system message prefix

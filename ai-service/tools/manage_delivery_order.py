@@ -3,107 +3,98 @@ from typing import Optional, List, Literal
 from pydantic import BaseModel, Field
 from langchain.tools import tool
 from sqlalchemy import text
+from context import request_dc_id
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
 
 DeliveryOrderStatus = Literal["READY", "PENDING", "RUNNING", "DONE", "IN_CALCULATION"]
-CREATE_REQUIRED_DO_FIELDS = ["so_origin", "delivery_order_num", "eta_target", "status", "dc_id", "customer_id"]
+CREATE_REQUIRED_DO_FIELDS = ["so_origin", "delivery_order_num", "eta_target", "status", "customer_id"]
 
-# ---------------------------------------------------------------------------
-# Pydantic Models
-# ---------------------------------------------------------------------------
 
 class DeliveryOrderProductLineInput(BaseModel):
     product_id: Optional[int] = Field(
         default=None,
-        description="ID numerik produk (dapat digantikan dengan product_name)."
+        description="Numeric ID of the product (can be replaced with product_name)."
     )
     product_name: Optional[str] = Field(
         default=None,
-        description="Nama produk (contoh: 'Produk A')."
+        description="Name of the product (example: 'Product A')."
     )
     quantity: Optional[float] = Field(
         default=1.0,
-        description="Jumlah kuantitas produk."
+        description="Total quantity of the product."
     )
     volume: Optional[float] = Field(
         default=0.0,
-        description="Volume total produk."
+        description="Total volume of the product."
     )
     weight: Optional[float] = Field(
         default=0.0,
-        description="Berat total produk."
+        description="Total weight of the product."
     )
     price: Optional[float] = Field(
         default=0.0,
-        description="Harga total produk."
+        description="Total price of the product."
     )
 
 
 class DeliveryOrderItemInput(BaseModel):
     id: Optional[int] = Field(
         default=None,
-        description="ID numerik delivery order (wajib untuk UPDATE jika delivery_order_num tidak diberikan)."
+        description="Numeric ID of the delivery order (required for UPDATE if delivery_order_num is not provided)."
     )
     so_origin: Optional[str] = Field(
         default=None,
-        description="Nomor Sales Order asal (contoh: 'SO-001')."
+        description="Sales Order number (example: 'SO-001')."
     )
     delivery_order_num: Optional[str] = Field(
         default=None,
-        description="Nomor Delivery Order (contoh: 'DO-001')."
+        description="Delivery Order number (example: 'DO-001')."
     )
     eta_target: Optional[str] = Field(
         default=None,
-        description="Target waktu kedatangan dalam format ISO 8601 (contoh: '2026-06-13T08:00:00' atau '2026-06-13')."
+        description="Target time of arrival in ISO 8601 format (example: '2026-06-13T08:00:00' or '2026-06-13')."
     )
     status: Optional[DeliveryOrderStatus] = Field(
         default=None,
-        description="Status delivery order: 'READY', 'PENDING', 'RUNNING', 'DONE', atau 'IN_CALCULATION'."
+        description="Delivery order status: 'READY', 'PENDING', 'RUNNING', 'DONE', atau 'IN_CALCULATION'."
     )
     dc_id: Optional[int] = Field(
         default=None,
-        description="ID Distribution Center. Bisa digantikan dengan dc_name."
+        description="Distribution Center ID. Can be replaced with dc_name."
     )
     dc_name: Optional[str] = Field(
         default=None,
-        description="Nama Distribution Center (contoh: 'DC Jakarta')."
+        description="Distribution Center name (example: 'DC Jakarta')."
     )
     customer_id: Optional[int] = Field(
         default=None,
-        description="ID customer penerima. Bisa digantikan dengan customer_name."
+        description="Customer ID. Can be replaced with customer_name."
     )
     customer_name: Optional[str] = Field(
         default=None,
-        description="Nama customer penerima (contoh: 'PT ABC')."
+        description="Customer name (example: 'PT ABC')."
     )
     description: Optional[str] = Field(
         default=None,
-        description="Deskripsi atau catatan tambahan."
+        description="Description or additional notes."
     )
     product_lines: Optional[List[DeliveryOrderProductLineInput]] = Field(
         default=None,
-        description="Daftar produk yang dimuat dalam delivery order ini."
+        description="List of products loaded in this delivery order."
     )
-
 
 class ManageDeliveryOrderInput(BaseModel):
     action: Literal["CREATE", "UPDATE"] = Field(
-        description="Tindakan yang akan dilakukan pada delivery order: 'CREATE' atau 'UPDATE'."
+        description="Action to be performed on the delivery order: 'CREATE' or 'UPDATE'."
     )
     data: DeliveryOrderItemInput = Field(
-        description="Objek data delivery order yang akan dibuat atau diperbarui."
+        description="Delivery order data object to be created or updated."
     )
 
-# ---------------------------------------------------------------------------
-# Helper Functions
-# ---------------------------------------------------------------------------
 
 def _resolve_do_names_to_ids(do_data: dict, db) -> list[str]:
     """
-    Resolve customer_name → customer_id, dc_name → dc_id, dan product_name → product_id secara in-place.
+    Resolve customer_name → customer_id, dc_name -> dc_id, and product_name -> product_id in-place.
     """
     errors: list[str] = []
     try:
@@ -145,21 +136,13 @@ def _resolve_do_names_to_ids(do_data: dict, db) -> list[str]:
         pass
     return errors
 
-
 def _error(msg: str) -> dict:
     return {"status": "error", "ui_action": "ERROR", "message": msg}
-
 
 def _success(ui_action: str, target: str, data, message: str) -> dict:
     return {"status": "success", "ui_action": ui_action, "target": target, "data": data, "message": message}
 
-# ---------------------------------------------------------------------------
-# Tool Factory
-# ---------------------------------------------------------------------------
-
 def get_manage_delivery_order_tool(db):
-    """Factory — mengembalikan tool manage_delivery_order yang terikat ke DB."""
-
     @tool(args_schema=ManageDeliveryOrderInput)
     def manage_delivery_order(action: str, data: DeliveryOrderItemInput) -> dict:
         """
@@ -173,21 +156,27 @@ def get_manage_delivery_order_tool(db):
 
             resolve_errors = _resolve_do_names_to_ids(do_dict, db)
             if resolve_errors:
-                return _error("Gagal memproses data delivery order:\n" + "\n".join(resolve_errors))
+                return _error("Failed to process delivery order data:\n" + "\n".join(resolve_errors))
 
             if action_upper == "CREATE":
+                if not do_dict.get("dc_id"):
+                    ctx_dc_id = request_dc_id.get()
+                    if ctx_dc_id:
+                        do_dict["dc_id"] = ctx_dc_id
+
                 missing = [f for f in CREATE_REQUIRED_DO_FIELDS if do_dict.get(f) is None]
                 if missing:
-                    return _error(f"Field wajib tidak lengkap untuk CREATE: {', '.join(missing)}.")
+                    return _error(f"Missing required fields for CREATE: {', '.join(missing)}.")
 
                 prefill_data = {
                     "so_origin": do_dict["so_origin"],
                     "delivery_order_num": do_dict["delivery_order_num"],
                     "eta_target": do_dict["eta_target"],
                     "status": str(do_dict["status"]).upper(),
-                    "dc_id": int(do_dict["dc_id"]),
                     "customer_id": int(do_dict["customer_id"]),
                 }
+                if do_dict.get("dc_id") is not None:
+                    prefill_data["dc_id"] = int(do_dict["dc_id"])
                 if "description" in do_dict and do_dict["description"]:
                     prefill_data["description"] = do_dict["description"]
                 if "product_lines" in do_dict and isinstance(do_dict["product_lines"], list):
@@ -213,22 +202,24 @@ def get_manage_delivery_order_tool(db):
                 do_num = do_dict.get("delivery_order_num")
 
                 if not do_id and not do_num:
-                    return _error("Untuk UPDATE, sertakan 'id' (integer) atau 'delivery_order_num' untuk mengidentifikasi order.")
+                    return _error("For UPDATE, include 'id' (integer) or 'delivery_order_num' to identify the order.")
 
                 if not do_id and do_num:
                     sql_find = text("SELECT id FROM delivery_order WHERE delivery_order_num = :num AND is_deleted = false LIMIT 1")
                     with db._engine.connect() as conn:
                         row = conn.execute(sql_find, {"num": str(do_num)}).fetchone()
                     if not row:
-                        return _error(f"Delivery order dengan nomor '{do_num}' tidak ditemukan.")
+                        return _error(f"Delivery order with number '{do_num}' not found.")
                     do_id = row[0]
 
+                if do_id is None:
+                    return _error("Could not resolve a valid delivery order ID.")
                 do_id = int(do_id)
 
                 allowed_fields = {"status", "customer_id"}
                 update_fields = {k: v for k, v in do_dict.items() if k in allowed_fields and v is not None}
                 if not update_fields:
-                    return _error("Tidak ada field yang dapat diubah. Field yang dapat diperbarui: status, customer_id.")
+                    return _error("No fields to update. Updatable fields: status, customer_id.")
 
                 if "status" in update_fields:
                     update_fields["status"] = str(update_fields["status"]).upper()
@@ -237,11 +228,11 @@ def get_manage_delivery_order_tool(db):
 
                 return _success(
                     "PREFILL", "edit_delivery_order", prefill_data,
-                    f"Data delivery order ID {do_id} siap diedit. Silakan periksa dan simpan perubahan di form."
+                    f"Data delivery order siap diedit. Silakan periksa dan simpan perubahan di form."
                 )
 
-            return _error("Action tidak dikenal. Gunakan 'CREATE' atau 'UPDATE'.")
+            return _error("Unknown action. Use 'CREATE' or 'UPDATE'.")
         except Exception as e:
-            return _error(f"Terjadi kesalahan tak terduga: {str(e)}")
+            return _error(f"Unexpected error: {str(e)}")
 
     return manage_delivery_order

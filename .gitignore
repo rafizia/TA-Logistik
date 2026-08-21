@@ -240,6 +240,7 @@ api-gateway/check-do-status.js
 __pycache__
 ai-service/benchmark_llm.py
 ai-service/main_zero.py
+ai-service/tests/prompt
 
 #prd
 prd.md
