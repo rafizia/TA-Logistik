@@ -59,8 +59,8 @@ class TruckItemInput(BaseModel):
     @field_validator("plate_number")
     @classmethod
     def check_plate_format(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None and str(v).strip():
-            v_stripped = str(v).strip().upper()
+        if v is not None and v.strip():
+            v_stripped = v.strip().upper()
             if not PLATE_NUMBER_REGEX.match(v_stripped):
                 raise ValueError(
                     f"Plate number format '{v}' is not valid. "

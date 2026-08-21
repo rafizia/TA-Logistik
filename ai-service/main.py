@@ -231,9 +231,9 @@ async def chat_with_ai(request: ChatRequest):
                                 command_payload["data"] = output.get("data")
                             break
                         elif ui_action == "ERROR":
-                            reply_text = output.get("message", "Terjadi kesalahan saat memproses data.")
+                            if not reply_text:
+                                reply_text = output.get("message", "Terjadi kesalahan saat memproses data.")
                             command_payload = None
-                            break
                 except Exception:
                     pass
             elif msg.type == "tool" and "SUCCESS:PREFILL:" in str(msg.content):
@@ -255,9 +255,7 @@ async def chat_with_ai(request: ChatRequest):
                 except Exception:
                     pass
             elif msg.type == "ai" and msg.content and not command_payload:
-                # Store the last AI message as the reply text, unless we already found a tool command
-                if not reply_text:
-                    reply_text = _content_to_str(msg.content)
+                reply_text = _content_to_str(msg.content)
 
         if not reply_text and command_payload:
             reply_text = "Baik, saya akan mengarahkan Anda ke halaman yang relevan."

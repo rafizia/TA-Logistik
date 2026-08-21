@@ -1,21 +1,19 @@
 import ast
-from typing import Optional, List, Literal
+from typing import Optional, Literal
 from pydantic import BaseModel, Field
 from langchain.tools import tool
-from sqlalchemy import text
 
 
 CREATE_REQUIRED_LOCATION_FIELDS = [
     "name", "address", "provinsi", "kabupaten_kota", "kecamatan",
-    "desa_kelurahan", "kode_pos", "open_hour", "close_hour",
-    "customer_id", "dc_id",
+    "desa_kelurahan", "kode_pos", "customer_id", "dc_id",
 ]
 
 
 class LocationItemInput(BaseModel):
-    id: Optional[int] = Field(
+    id: Optional[str] = Field(
         default=None,
-        description="Location numeric ID (required for UPDATE)."
+        description="Location UUID string (required for UPDATE). Must be the exact UUID from the database."
     )
     name: Optional[str] = Field(
         default=None,
