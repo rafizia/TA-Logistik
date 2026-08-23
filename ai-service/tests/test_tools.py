@@ -10,6 +10,7 @@ from tools.system_control import system_control
 from tools.manage_truck import get_manage_truck_tool
 from tools.manage_location import get_manage_location_tool
 from tools.manage_delivery_order import get_manage_delivery_order_tool
+from tools.automate_shipment import get_automate_shipment_tool
 
 
 class TestSystemControl:
@@ -241,7 +242,7 @@ class TestManageLocation:
         data_input = {
             "action": "UPDATE",
             "data": {
-                "id": 10,
+                "id": "loc-uuid-10",
                 "name": "Toko ABC Updated"
             }
         }
@@ -249,7 +250,7 @@ class TestManageLocation:
         assert result["status"] == "success"
         assert result["ui_action"] == "PREFILL"
         assert result["target"] == "edit_location"
-        assert result["data"]["Id"] == 10
+        assert result["data"]["Id"] == "loc-uuid-10"
 
 
 class TestManageDeliveryOrder:
@@ -324,5 +325,42 @@ class TestManageDeliveryOrder:
         assert result["target"] == "edit_delivery_order"
         assert result["data"]["id"] == 5
         assert result["data"]["status"] == "DONE"
+
+
+class TestAutomateShipment:
+    @pytest.fixture
+    def mock_db(self):
+        return MagicMock()
+
+    @pytest.fixture
+    def automate_shipment_tool(self, mock_db):
+        return get_automate_shipment_tool(mock_db)
+
+    def test_automate_shipment_success(self, automate_shipment_tool):
+        data_input = {
+            "optimization_type": "distance",
+            "delivery_order_ids": [3, 7, 15]
+        }
+        result = automate_shipment_tool.invoke(data_input)
+        assert result["ui_action"] == "PREFILL"
+        assert result["target"] == "automate_shipment"
+        assert result["data"]["optimization_type"] == "distance"
+        assert result["data"]["delivery_order_ids"] == [3, 7, 15]
+        assert result["data"]["auto_submit"] is True
+
+    def test_automate_shipment_invalid_type(self, automate_shipment_tool):
+        with pytest.raises(ValidationError):
+            automate_shipment_tool.invoke({
+                "optimization_type": "invalid_type",
+                "delivery_order_ids": [1, 2]
+            })
+
+    def test_automate_shipment_empty_ids(self, automate_shipment_tool):
+        result = automate_shipment_tool.invoke({
+            "optimization_type": "load",
+            "delivery_order_ids": []
+        })
+        assert result["ui_action"] == "ERROR"
+        assert "Missing or empty 'delivery_order_ids'" in result["message"]
 
 

@@ -39,12 +39,27 @@ Result: {"status": "success", "ui_action": "PREFILL", "target": "add_location", 
 Final Answer: Data lokasi telah disiapkan. Silakan periksa dan simpan di form yang akan dibuka.
 
 ---
-[Example 6: Shipping Automation]
+[Example 6: Shipping Automation - Query-First by Customer]
 User: "Buatkan pengiriman otomatis dengan optimasi jarak untuk customer PT ABC."
-Thought: Pengguna ingin membuat pengiriman otomatis dengan optimasi jarak. automate_shipment menerima customer_name langsung — tidak perlu memanggil get_available_options terlebih dahulu.
-Action: automate_shipment(optimization_type="distance", customer_name="PT ABC")
-Result: {"ui_action": "PREFILL", "target": "automate_shipment", "data": {...}, "message": "Memulai proses pembuatan rute pengiriman otomatis..."}
+Thought: Pengguna ingin membuat pengiriman otomatis dengan optimasi jarak untuk customer PT ABC. automate_shipment HANYA menerima delivery_order_ids. Saya harus query database terlebih dahulu untuk mencari ID delivery order milik PT ABC yang berstatus READY dan belum dihapus.
+Action: sql_db_query(query="SELECT del_ord.id FROM delivery_order del_ord JOIN customer c ON del_ord.customer_id = c.id WHERE c.name ILIKE '%PT ABC%' AND del_ord.status = 'READY' AND del_ord.is_deleted = false")
+Observation: [(4,), (11,), (19,)]
+Thought: Ditemukan 3 delivery order untuk PT ABC (ID 4, 11, 19). Sekarang saya panggil automate_shipment dengan list ID tersebut.
+Action: automate_shipment(optimization_type="distance", delivery_order_ids=[4, 11, 19])
+Result: {"ui_action": "PREFILL", "target": "automate_shipment", "data": {"optimization_type": "distance", "delivery_order_ids": [4, 11, 19], "auto_submit": true}, "message": "Memulai proses pembuatan rute pengiriman otomatis..."}
 Final Answer: Pratinjau pengiriman berhasil dibuat! Mengalihkan ke halaman tinjauan pengiriman...
+
+---
+[Example 6b: Shipping Automation - Missing Optimization Type, MUST ASK FIRST]
+User: "Buatkan pengiriman otomatis untuk customer PT ABC."
+Thought: Pengguna ingin membuat pengiriman otomatis untuk customer PT ABC, tetapi TIDAK menyebutkan tipe optimasi yang diinginkan. optimization_type adalah parameter WAJIB. Saya TIDAK BOLEH menebak atau mengasumsikan default 'distance'. Saya HARUS bertanya terlebih dahulu kepada pengguna untuk memilih tipe optimasi.
+Final Answer: Untuk membuat pengiriman otomatis untuk **PT ABC**, mohon pilih strategi/tipe optimasi yang ingin digunakan:
+1. **Jarak (distance)** - Memprioritaskan rute dengan jarak tempuh terpendek
+2. **Emisi (emission)** - Meminimalkan perkiraan emisi karbon (CO2)
+3. **Muatan (load)** - Memaksimalkan keterisian kapasitas truk
+4. **Seimbang (balance)** - Menyeimbangkan jarak tempuh dan muatan
+
+Silakan tentukan tipe optimasi yang Anda inginkan.
 
 ---
 [Example 7: Truck Update - Single]
@@ -153,34 +168,9 @@ Final Answer: Terima kasih! Saya masih membutuhkan 2 informasi lagi:
 
 === END OF EXAMPLE ===
 
----
-[Example 15: Simulate Shipment - Simple Preview by Date]
-User: "Kira-kira kalau saya jalankan pengiriman hari ini dengan optimasi jarak, butuh berapa truk?"
-Thought: Pengguna menggunakan kata "kira-kira" yang menunjukkan mereka ingin simulasi/preview saja, bukan membuat pengiriman resmi. Saya harus menggunakan simulate_shipment. Pertama saya perlu mencari ID delivery order untuk hari ini.
-Action: sql_db_query(query="SELECT id FROM delivery_order WHERE eta_target::date = CURRENT_DATE AND status = 'READY' AND is_deleted = false")
-Observation: [(1,), (4,), (7,), (11,)]
-Thought: Ada 4 delivery order untuk hari ini. Sekarang saya simulasikan dengan optimize jarak.
-Action: simulate_shipment(optimization_type="distance", delivery_order_ids=[1, 4, 7, 11])
-Result: "**Hasil Simulasi Rute (DISTANCE)**\nTruk 1: B 1234 AB (Blind Van)\n  • Pesanan: 3 DO\n  • Jarak: 45.20 km\n  ...\nIni hanya simulasi. Data belum disimpan ke sistem."
-Final Answer: Berdasarkan simulasi, untuk 4 pesanan hari ini dibutuhkan **2 truk** dengan total jarak sekitar **78 km**. Ini hanya estimasi dan belum disimpan. Apakah Anda ingin melanjutkan dan membuat pengiriman resminya?
-
----
-[Example 16: Simulate Shipment - Query-First by City, Then Confirm Real Shipment]
-User: "Cek dulu estimasi rute untuk semua order ke Surabaya, pakai emisi ya."
-Thought: Pengguna bilang "cek dulu" yang berarti mereka ingin simulasi saja. Saya query order ke Surabaya dulu.
-Action: sql_db_query(query="SELECT del_ord.id FROM delivery_order del_ord JOIN location loc ON del_ord.loc_dest_id = CAST(loc.id AS TEXT) WHERE loc.kabupaten_kota ILIKE '%Surabaya%' AND del_ord.status = 'READY' AND del_ord.is_deleted = false")
-Observation: [(3,), (9,), (14,)]
-Thought: Ada 3 order ke Surabaya. Jalankan simulasi dengan optimasi emisi.
-Action: simulate_shipment(optimization_type="emission", delivery_order_ids=[3, 9, 14])
-Result: "**Hasil Simulasi Rute (EMISSION)**\n..."
-Final Answer: Hasil simulasi untuk 3 pesanan ke Surabaya: butuh 1 truk, estimasi jarak 62.5 km, emisi ~18.3 kg CO₂. Ini hanya simulasi ya. Kalau sudah oke, bilang saja "buat pengiriman" dan saya akan proseskan secara resmi.
-
-=== END OF EXAMPLE ===
-
 IMPORTANT: DO NOT call get_available_options before manage_truck, manage_location, or manage_delivery_order. These tools resolve names (e.g., dc_name, customer_name, type_name) automatically to IDs. Pass names directly to the tools.
-IMPORTANT: When the user provides specific delivery order IDs (e.g., "order ID 5", "DO ID 5 dan 12"), use the delivery_order_ids parameter directly. Do NOT use other filters when specific IDs are given.
-IMPORTANT: When the user describes delivery orders by attributes (e.g., eta_target, volume, destination city), use the QUERY-FIRST pattern: first query the database with sql_db_query to find matching IDs, then pass them to automate_shipment via delivery_order_ids. Always include status = 'READY' AND is_deleted = false in your WHERE clause.
-IMPORTANT: For manage_delivery_order CREATE, if ANY of the 6 mandatory fields (so_origin, delivery_order_num, eta_target, status, dc_id, customer_id) are missing, you MUST ask the user for them BEFORE calling any tool. Never guess or assume missing values.
-IMPORTANT: If the user says 'kira-kira', 'simulasikan', 'estimasi', 'cek dulu', 'berapa truk', 'tes dulu', or any phrase that implies preview without commitment, ALWAYS use simulate_shipment instead of automate_shipment."""
+IMPORTANT: For automate_shipment, optimization_type is STRICTLY MANDATORY. If the user does not specify an optimization strategy (distance, emission, load, or balance), you MUST ASK the user which strategy they prefer BEFORE calling the tool. NEVER guess, assume, or default to 'distance'.
+IMPORTANT: automate_shipment ONLY accepts delivery_order_ids. When the user describes orders by criteria (dates, customer, city, ready orders), you MUST use the QUERY-FIRST pattern: query the database using sql_db_query with status = 'READY' AND is_deleted = false (and dc_id if user has fixed DC), collect the matching order integer IDs, and pass them as delivery_order_ids.
+IMPORTANT: For manage_delivery_order CREATE, if ANY of the 6 mandatory fields (so_origin, delivery_order_num, eta_target, status, dc_id, customer_id) are missing, you MUST ask the user for them BEFORE calling any tool. Never guess or assume missing values."""
 
 AGENT_TEMPLATE_FEWSHOT = AGENT_TEMPLATE + FEW_SHOT_EXAMPLES
