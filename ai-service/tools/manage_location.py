@@ -95,32 +95,46 @@ class ManageLocationInput(BaseModel):
 
 
 def _resolve_location_names_to_ids(location_data: dict, db) -> list[str]:
-    """Resolve customer_name -> customer_id and dc_name -> dc_id in-place."""
+    """Resolve and validate customer_name/customer_id and dc_name/dc_id in-place."""
     errors: list[str] = []
     try:
-        if not location_data.get("customer_id") and location_data.get("customer_name"):
-            customers_str = db.run("SELECT id, name FROM customer")
-            customers_list: list[tuple] = ast.literal_eval(customers_str)
-            cust_map = {str(name).lower(): cid for cid, name in customers_list}
-            key = str(location_data["customer_name"]).lower()
+        customers_str = db.run("SELECT id, name FROM customer")
+        customers_list: list[tuple] = ast.literal_eval(customers_str)
+        cust_map = {str(name).strip().lower(): cid for cid, name in customers_list}
+        valid_cust_ids = {cid for cid, _ in customers_list}
+        cust_options = ", ".join(name for _, name in customers_list)
+
+        c_name = location_data.get("customer_name")
+        c_id = location_data.get("customer_id")
+        if c_name:
+            key = str(c_name).strip().lower()
             if key in cust_map:
                 location_data["customer_id"] = cust_map[key]
             else:
-                options = ", ".join(name for _, name in customers_list)
-                errors.append(f"Customer '{location_data['customer_name']}' not found. Options: {options}")
+                errors.append(f"Customer '{c_name}' not found in database. Options: {cust_options}")
+        elif c_id is not None:
+            if c_id not in valid_cust_ids:
+                errors.append(f"Customer ID {c_id} not found in database. Options: {cust_options}")
 
-        if not location_data.get("dc_id") and location_data.get("dc_name"):
-            dcs_str = db.run("SELECT id, name FROM dc")
-            dcs_list: list[tuple] = ast.literal_eval(dcs_str)
-            dc_map = {str(name).lower(): did for did, name in dcs_list}
-            key = str(location_data["dc_name"]).lower()
+        dcs_str = db.run("SELECT id, name FROM dc")
+        dcs_list: list[tuple] = ast.literal_eval(dcs_str)
+        dc_map = {str(name).strip().lower(): did for did, name in dcs_list}
+        valid_dc_ids = {did for did, _ in dcs_list}
+        dc_options = ", ".join(name for _, name in dcs_list)
+
+        d_name = location_data.get("dc_name")
+        d_id = location_data.get("dc_id")
+        if d_name:
+            key = str(d_name).strip().lower()
             if key in dc_map:
                 location_data["dc_id"] = dc_map[key]
             else:
-                options = ", ".join(name for _, name in dcs_list)
-                errors.append(f"DC '{location_data['dc_name']}' not found. Options: {options}")
-    except Exception:
-        pass
+                errors.append(f"DC '{d_name}' not found in database. Options: {dc_options}")
+        elif d_id is not None:
+            if d_id not in valid_dc_ids:
+                errors.append(f"DC ID {d_id} not found in database. Options: {dc_options}")
+    except Exception as e:
+        errors.append(f"Database reference error: {str(e)}")
     return errors
 
 def _error(msg: str) -> dict:
@@ -133,10 +147,16 @@ def get_manage_location_tool(db):
     @tool(args_schema=ManageLocationInput)
     def manage_location(action: str, data: LocationItemInput) -> dict:
         """
-        Use this tool for CREATE or UPDATE operations on location entities.
-        - action: 'CREATE' or 'UPDATE'
-        - data: Location object containing fields like name, address, provinsi, kabupaten_kota,
-          kecamatan, desa_kelurahan, kode_pos, open_hour, close_hour, customer_name/customer_id, dc_name/dc_id.
+        Use this tool to prepare location data for CREATE or UPDATE and redirect the user to the location form.
+        - action: 'CREATE' (requires name, address, provinsi, kabupaten_kota, kecamatan, desa_kelurahan, kode_pos, open_hour, close_hour, customer_name/customer_id, dc_name/dc_id)
+                  'UPDATE' (requires id UUID string, plus any updatable fields).
+        - data: Single location object (dict).
+        
+        Examples:
+        - Create Location:
+          manage_location(action="CREATE", data={"name": "Toko Makmur", "address": "Jl. Sudirman 10", "provinsi": "DKI Jakarta", "kabupaten_kota": "Jakarta Pusat", "kecamatan": "Gambir", "desa_kelurahan": "Gambir", "kode_pos": "10110", "open_hour": "08:00", "close_hour": "17:00", "customer_name": "PT ABC", "dc_name": "DC Jakarta"})
+        - Update Location:
+          manage_location(action="UPDATE", data={"id": "550e8400-e29b-41d4-a716-446655440000", "address": "Jl. Thamrin No. 20", "open_hour": "09:00"})
         """
         try:
             loc_dict: dict = data.model_dump(exclude_unset=True) if isinstance(data, BaseModel) else dict(data)
