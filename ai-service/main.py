@@ -10,8 +10,8 @@ from pydantic import BaseModel
 from langchain_community.utilities.sql_database import SQLDatabase
 from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_core.prompts import PromptTemplate
-from prompt_template import AGENT_TEMPLATE
-from prompt_template_fewshot import AGENT_TEMPLATE_FEWSHOT
+from prompts.agent_template import AGENT_TEMPLATE
+from prompts.prompt_template_fewshot import AGENT_TEMPLATE_FEWSHOT
 from tools import use_tools
 from langchain.agents import create_agent, AgentState
 from langchain.agents.middleware import before_model

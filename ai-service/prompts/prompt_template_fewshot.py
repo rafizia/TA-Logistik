@@ -1,4 +1,4 @@
-from prompt_template import AGENT_TEMPLATE
+from prompts.agent_template import AGENT_TEMPLATE
 
 FEW_SHOT_EXAMPLES = """
 
