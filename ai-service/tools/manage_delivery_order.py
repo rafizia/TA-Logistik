@@ -94,46 +94,68 @@ class ManageDeliveryOrderInput(BaseModel):
 
 def _resolve_do_names_to_ids(do_data: dict, db) -> list[str]:
     """
-    Resolve customer_name → customer_id, dc_name -> dc_id, and product_name -> product_id in-place.
+    Resolve and strictly validate customer_name/customer_id, dc_name/dc_id, and product_name/product_id in-place.
     """
     errors: list[str] = []
     try:
-        if not do_data.get("customer_id") and do_data.get("customer_name"):
-            customers_str = db.run("SELECT id, name FROM customer")
-            customers_list: list[tuple] = ast.literal_eval(customers_str)
-            cust_map = {str(name).lower(): cid for cid, name in customers_list}
-            key = str(do_data["customer_name"]).lower()
+        customers_str = db.run("SELECT id, name FROM customer")
+        customers_list: list[tuple] = ast.literal_eval(customers_str)
+        cust_map = {str(name).strip().lower(): cid for cid, name in customers_list}
+        valid_cust_ids = {cid for cid, _ in customers_list}
+        cust_options = ", ".join(name for _, name in customers_list)
+
+        c_name = do_data.get("customer_name")
+        c_id = do_data.get("customer_id")
+        if c_name:
+            key = str(c_name).strip().lower()
             if key in cust_map:
                 do_data["customer_id"] = cust_map[key]
             else:
-                options = ", ".join(name for _, name in customers_list)
-                errors.append(f"Customer '{do_data['customer_name']}' tidak ditemukan. Opsi: {options}")
+                errors.append(f"Customer '{c_name}' not found in database. Options: {cust_options}")
+        elif c_id is not None:
+            if c_id not in valid_cust_ids:
+                errors.append(f"Customer ID {c_id} not found in database. Options: {cust_options}")
 
-        if not do_data.get("dc_id") and do_data.get("dc_name"):
-            dcs_str = db.run("SELECT id, name FROM dc")
-            dcs_list: list[tuple] = ast.literal_eval(dcs_str)
-            dc_map = {str(name).lower(): did for did, name in dcs_list}
-            key = str(do_data["dc_name"]).lower()
+        dcs_str = db.run("SELECT id, name FROM dc")
+        dcs_list: list[tuple] = ast.literal_eval(dcs_str)
+        dc_map = {str(name).strip().lower(): did for did, name in dcs_list}
+        valid_dc_ids = {did for did, _ in dcs_list}
+        dc_options = ", ".join(name for _, name in dcs_list)
+
+        d_name = do_data.get("dc_name")
+        d_id = do_data.get("dc_id")
+        if d_name:
+            key = str(d_name).strip().lower()
             if key in dc_map:
                 do_data["dc_id"] = dc_map[key]
             else:
-                options = ", ".join(name for _, name in dcs_list)
-                errors.append(f"DC '{do_data['dc_name']}' tidak ditemukan. Opsi: {options}")
+                errors.append(f"DC '{d_name}' not found in database. Options: {dc_options}")
+        elif d_id is not None:
+            if d_id not in valid_dc_ids:
+                errors.append(f"DC ID {d_id} not found in database. Options: {dc_options}")
 
         if "product_lines" in do_data and isinstance(do_data["product_lines"], list):
             products_str = db.run("SELECT id, name FROM product")
             products_list: list[tuple] = ast.literal_eval(products_str)
-            prod_map = {str(name).lower(): pid for pid, name in products_list}
+            prod_map = {str(name).strip().lower(): pid for pid, name in products_list}
+            valid_prod_ids = {pid for pid, _ in products_list}
+            prod_options = ", ".join(name for _, name in products_list)
+
             for idx, pl in enumerate(do_data["product_lines"]):
-                if isinstance(pl, dict) and not pl.get("product_id") and pl.get("product_name"):
-                    key = str(pl["product_name"]).lower()
-                    if key in prod_map:
-                        pl["product_id"] = prod_map[key]
-                    else:
-                        options = ", ".join(name for _, name in products_list)
-                        errors.append(f"Produk #{idx+1} ('{pl['product_name']}') tidak ditemukan. Opsi: {options}")
-    except Exception:
-        pass
+                if isinstance(pl, dict):
+                    p_name = pl.get("product_name")
+                    p_id = pl.get("product_id")
+                    if p_name:
+                        key = str(p_name).strip().lower()
+                        if key in prod_map:
+                            pl["product_id"] = prod_map[key]
+                        else:
+                            errors.append(f"Produk #{idx+1} ('{p_name}') not found in database. Options: {prod_options}")
+                    elif p_id is not None:
+                        if p_id not in valid_prod_ids:
+                            errors.append(f"Produk ID {p_id} not found in database. Options: {prod_options}")
+    except Exception as e:
+        errors.append(f"Database reference error: {str(e)}")
     return errors
 
 def _error(msg: str) -> dict:
@@ -146,11 +168,23 @@ def get_manage_delivery_order_tool(db):
     @tool(args_schema=ManageDeliveryOrderInput)
     def manage_delivery_order(action: str, data: DeliveryOrderItemInput) -> dict:
         """
-        Use this tool to CREATE or UPDATE a delivery order.
-        - action: 'CREATE' or 'UPDATE'
-        - data: delivery order object containing fields like so_origin, delivery_order_num, eta_target, status, customer_name/customer_id, dc_name/dc_id, product_lines.
+        Use this tool to prepare delivery order data for CREATE or UPDATE and redirect the user to the delivery order form.
+        - action: 'CREATE' (requires so_origin, delivery_order_num, eta_target, status, customer_name/customer_id, dc_name/dc_id)
+                  'UPDATE' (requires id or delivery_order_num, plus updatable fields: status, customer_name/customer_id).
+        - data: Single delivery order object (dict).
+        
+        Examples:
+        - Create Delivery Order:
+          manage_delivery_order(action="CREATE", data={"so_origin": "SO-001", "delivery_order_num": "DO-001", "eta_target": "2026-06-15T08:00:00", "status": "READY", "customer_name": "PT ABC", "dc_name": "DC Jakarta", "product_lines": [{"product_name": "Produk A", "quantity": 10}]})
+        - Update Delivery Order Status:
+          manage_delivery_order(action="UPDATE", data={"delivery_order_num": "DO-001", "status": "DONE"})
         """
         try:
+            from context import request_role
+            role = (request_role.get() or "").strip().lower()
+            if "super" in role:
+                return _error("Access Denied: Super Admin role does not have permission to create or update delivery orders.")
+
             do_dict: dict = data.model_dump(exclude_unset=True) if isinstance(data, BaseModel) else dict(data)
             action_upper = action.upper()
 
