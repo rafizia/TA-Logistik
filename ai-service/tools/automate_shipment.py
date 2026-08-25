@@ -30,12 +30,23 @@ def get_automate_shipment_tool(db):
         delivery_order_ids: list[int],
     ) -> dict:
         """
-        Use this tool to automatically create an optimized shipment for a list of delivery order IDs.
-        - optimization_type: 'distance', 'emission', 'load', or 'balance' (MANDATORY)
-        - delivery_order_ids: list of integer IDs of delivery orders to include (MANDATORY).
-          Always use sql_db_query first to retrieve valid order IDs (status = 'READY' AND is_deleted = false).
+        Use this tool to automatically generate an optimized multi-order shipment route and open the preview page.
+        - optimization_type (MANDATORY): 'distance' (shortest route), 'emission' (lowest CO2), 'load' (max payload capacity), or 'balance' (balance distance and load). If not specified by user, ASK FIRST before calling this tool.
+        - delivery_order_ids (MANDATORY): List of integer order IDs with status = 'READY' and is_deleted = false. ALWAYS query database with sql_db_query first to retrieve valid integer IDs.
+        
+        Example:
+        - Optimize orders [4, 11, 19] for shortest distance:
+          automate_shipment(optimization_type="distance", delivery_order_ids=[4, 11, 19])
         """
         try:
+            from context import request_role
+            role = (request_role.get() or "").strip().lower()
+            if "super" in role:
+                return {
+                    "ui_action": "ERROR",
+                    "message": "Access Denied: Super Admin role does not have permission to create shipments."
+                }
+
             VALID_TYPES = {"distance", "emission", "load", "balance"}
             if not optimization_type or optimization_type not in VALID_TYPES:
                 return {
