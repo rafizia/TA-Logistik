@@ -37,6 +37,38 @@ class TestSystemControl:
         with pytest.raises(ValidationError):
             system_control.invoke({"target_page": "halaman_tidak_valid"})
 
+    def test_system_control_super_admin_restrictions(self):
+        from context import request_role
+        token = request_role.set("Super")
+        try:
+            # Super admin restricted from add_shipment
+            result = system_control.invoke({"target_page": "add_shipment"})
+            assert result["status"] == "error"
+            assert result["ui_action"] == "ERROR"
+            assert ("Access Denied" in result["message"] or "Akses ditolak" in result["message"])
+
+            # Super admin allowed on customers_list
+            result_ok = system_control.invoke({"target_page": "customers_list"})
+            assert result_ok["status"] == "success"
+        finally:
+            request_role.reset(token)
+
+    def test_system_control_admin_dc_restrictions(self):
+        from context import request_role
+        token = request_role.set("Admin DC")
+        try:
+            # Admin DC restricted from customers_list
+            result = system_control.invoke({"target_page": "customers_list"})
+            assert result["status"] == "error"
+            assert result["ui_action"] == "ERROR"
+            assert ("Access Denied" in result["message"] or "Akses ditolak" in result["message"])
+
+            # Admin DC allowed on shipments_list
+            result_ok = system_control.invoke({"target_page": "shipments_list"})
+            assert result_ok["status"] == "success"
+        finally:
+            request_role.reset(token)
+
 
 class TestManageTruck:
     @pytest.fixture

@@ -81,8 +81,6 @@ AVAILABLE TOOLS & OPERATIONS:
      * UPDATE Guardrails:
        - ONLY the following fields may be changed: dc_id (or dc_name), first_status, and second_status.
        - Fields such as plate_number, type_id, type_name, and max_individual_capacity_volume CANNOT be changed. If the user asks to change non-allowed fields, politely explain that only DC, first_status, and second_status can be updated.
-       - Single: {{"action": "UPDATE", "data": [{{"plate_number": "B 1234 AB", "dc_name": "DC Jakarta"}}]}}
-       - Bulk:   {{"action": "UPDATE", "data": [{{"plate_number": "B 1234 AB", "dc_name": "DC Jakarta"}}, {{"plate_number": "D 5678 CD", "first_status": "UNAVAILABLE"}}]}}
      * General:
        - 'data' MUST ALWAYS be a LIST (array of dicts), never a bare dict.
    - Side effects:

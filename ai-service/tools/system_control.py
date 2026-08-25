@@ -1,6 +1,7 @@
 from typing import Optional, Literal
 from pydantic import BaseModel, Field, model_validator
 from langchain.tools import tool
+from context import request_role
 
 
 TargetPage = Literal[
@@ -24,6 +25,17 @@ PAGES_REQUIRING_ID = {
     "detail_customer",
 }
 
+SUPER_ADMIN_RESTRICTED_PAGES = {
+    "add_shipment", "edit_shipment", "detail_shipment",
+    "add_delivery_order", "edit_delivery_order",
+}
+
+ADMIN_DC_RESTRICTED_PAGES = {
+    "customers_list", "detail_customer",
+    "users_list", "roles_list",
+    "add_truck", "bulk_add_truck", "edit_truck", "bulk_edit_truck",
+}
+
 
 class SystemControlInput(BaseModel):
     target_page: TargetPage = Field(description="Target page UI to navigate to.")
@@ -39,11 +51,35 @@ class SystemControlInput(BaseModel):
 @tool(args_schema=SystemControlInput)
 def system_control(target_page: str, entity_id: Optional[int] = None) -> dict:
     """
-    Use this tool for UI navigation.
-    For pages following the 'edit_*' or 'detail_*' pattern, you MUST include the entity_id.
-    If the entity_id is required but not available from the conversation context,
-    DO NOT call this tool—ask the user for the entity ID or name first.
+    Use this tool to navigate the UI and open specific pages (dashboard, list, add form, detail, edit).
+    - For detail and edit pages ('edit_*', 'detail_*'), you MUST provide the database 'entity_id'.
+    - Do NOT call this tool for data modification (use CRUD tools instead).
+    
+    Examples:
+    - Open dashboard: system_control(target_page="dashboard")
+    - Open trucks list: system_control(target_page="trucks_list")
+    - Open detail shipment (ID 5): system_control(target_page="detail_shipment", entity_id=5)
+    - Open edit truck (ID 12): system_control(target_page="edit_truck", entity_id=12)
     """
+    role = (request_role.get() or "").strip().lower()
+    
+    # Check Super Admin restrictions
+    if "super" in role:
+        if target_page in SUPER_ADMIN_RESTRICTED_PAGES:
+            return {
+                "status": "error",
+                "ui_action": "ERROR",
+                "message": f"Access Denied. You don't have permission to access this page."
+            }
+    # Check Admin DC restrictions
+    elif role:
+        if target_page in ADMIN_DC_RESTRICTED_PAGES:
+            return {
+                "status": "error",
+                "ui_action": "ERROR",
+                "message": f"Access Denied. You don't have permission to access this page."
+            }
+
     return {
         "status": "success",
         "ui_action": "NAVIGATE",

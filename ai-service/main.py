@@ -11,7 +11,6 @@ from langchain_community.utilities.sql_database import SQLDatabase
 from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_core.prompts import PromptTemplate
 from prompts.agent_template import AGENT_TEMPLATE
-from prompts.prompt_template_fewshot import AGENT_TEMPLATE_FEWSHOT
 from tools import use_tools
 from langchain.agents import create_agent, AgentState
 from langchain.agents.middleware import before_model
@@ -46,7 +45,7 @@ db = SQLDatabase.from_uri(pg_uri)
 '''
 _ollama_url   = os.getenv("OLLAMA_BASE_URL", "http://e2e_logistics_ollama:11434")
 _ollama_model = os.getenv("OLLAMA_MODEL", "qwen3.5:9b")
-llm = ChatOllama(model=_ollama_model, base_url=_ollama_url, num_ctx=4096, keep_alive="5m")
+llm = ChatOllama(model=_ollama_model, base_url=_ollama_url, keep_alive="5m")
 
 '''
 # Google Gemini API configuration:
@@ -67,7 +66,7 @@ PROMPT = PromptTemplate(
 )
 
 all_tools = tools + toolkit.get_tools()
-sys_prompt = AGENT_TEMPLATE_FEWSHOT
+sys_prompt = AGENT_TEMPLATE
 memory = InMemorySaver()
 
 @before_model
@@ -118,22 +117,24 @@ class ChatRequest(BaseModel):
 @app.post("/chat")
 async def chat_with_ai(request: ChatRequest):
     try:
-        from context import request_token, request_dc_id
+        from context import request_token, request_dc_id, request_role
         if request.user_context and request.user_context.token:
             request_token.set(request.user_context.token)
         else:
             request_token.set("")
         request_dc_id.set(request.user_context.dc_id if request.user_context else None)
+        request_role.set(request.user_context.role if request.user_context else None)
         input_messages = [{"role": "user", "content": request.query}]
 
-        # Inject user context (DC info) as a system message prefix
+        # Inject user context (DC info & RBAC) as a system message prefix
         if request.user_context:
             ctx = request.user_context
-            if ctx.dc_id:
-                dc_info_parts = [f"dc_id={ctx.dc_id}"]
+            role_name = ctx.role or ("Admin DC" if ctx.dc_id else "Super")
+            if ctx.dc_id or "super" not in (role_name.lower()):
+                dc_info_parts = [f"dc_id={ctx.dc_id}"] if ctx.dc_id else []
                 if ctx.dc_name:
                     dc_info_parts.append(f"dc_name='{ctx.dc_name}'")
-                else:
+                elif ctx.dc_id:
                     try:
                         sql_dc = text("SELECT name FROM dc WHERE id = :dc_id")
                         with db._engine.connect() as conn:
@@ -142,17 +143,22 @@ async def chat_with_ai(request: ChatRequest):
                             dc_info_parts.append(f"dc_name='{row[0]}'")
                     except Exception:
                         pass
+                dc_str = f" Their Distribution Center (DC) is fixed: {', '.join(dc_info_parts)}." if dc_info_parts else ""
                 dc_context_msg = (
-                    f"[SYSTEM CONTEXT] The current user is logged in as role '{ctx.role or 'Admin DC'}'. "
-                    f"Their Distribution Center (DC) is fixed and CANNOT be changed: {', '.join(dc_info_parts)}. "
-                    f"When creating a delivery order, you MUST use this dc_id automatically. "
-                    f"Do NOT ask the user about which DC to use. The dc_id is already determined."
+                    f"[SYSTEM CONTEXT] The current user is logged in as role '{role_name}'.{dc_str} "
+                    f"When creating a delivery order, use this dc_id automatically.\n"
+                    f"ROLE-BASED ACCESS RESTRICTIONS FOR ADMIN DC:\n"
+                    f"- RESTRICTED / FORBIDDEN PAGES: 'customers_list', 'detail_customer', 'users_list', 'roles_list', 'add_truck', 'bulk_add_truck', 'edit_truck', 'bulk_edit_truck'.\n"
+                    f"- RESTRICTED ACTIONS: Adding or editing truck data (manage_truck is prohibited).\n"
+                    f"- CRITICAL INSTRUCTION: If the user asks to navigate to, open, add, edit, or view details of any restricted customer, user, role, or truck create/edit page, you MUST REFUSE politely in Indonesian stating that Admin DC does not have permission. NEVER call system_control or manage_truck for these restricted items!"
                 )
             else:
                 dc_context_msg = (
-                    f"[SYSTEM CONTEXT] The current user is logged in as role '{ctx.role or 'Super'}'. "
-                    f"They do NOT have a fixed Distribution Center (DC). "
-                    f"When creating a delivery order, you MUST ask the user which DC they want to use."
+                    f"[SYSTEM CONTEXT] The current user is logged in as role '{role_name}'. They do NOT have a fixed Distribution Center (DC).\n"
+                    f"ROLE-BASED ACCESS RESTRICTIONS FOR SUPER ADMIN:\n"
+                    f"- RESTRICTED / FORBIDDEN PAGES: 'add_shipment', 'edit_shipment', 'detail_shipment', 'add_delivery_order', 'edit_delivery_order'.\n"
+                    f"- RESTRICTED ACTIONS: Creating shipments (automate_shipment) and creating/updating delivery orders (manage_delivery_order).\n"
+                    f"- CRITICAL INSTRUCTION: If the user asks to navigate to, open, create, edit, or view details of shipments, or create/edit delivery orders, you MUST REFUSE politely in Indonesian stating that Super Admin does not have permission. NEVER call system_control, automate_shipment, or manage_delivery_order for these restricted items!"
                 )
 
             input_messages = [
@@ -181,7 +187,6 @@ async def chat_with_ai(request: ChatRequest):
         print("="*50 + "\n")
         
         final_messages = response.get("messages", [])
-        reply_text = ""
         command_payload = None
 
         def _content_to_str(content) -> str:
@@ -199,11 +204,20 @@ async def chat_with_ai(request: ChatRequest):
                         parts.append(str(part))
                 return "".join(parts)
             return str(content)
-        
-        # Iterate over messages in reverse to find the latest tool call or final answer
+
+        # 1. Extract the latest AI generated text response
+        ai_reply_text = ""
+        for msg in reversed(final_messages):
+            if msg.type == "ai" and msg.content:
+                text_content = _content_to_str(msg.content).strip()
+                if text_content:
+                    ai_reply_text = text_content
+                    break
+
+        # 2. Extract UI command payload from tool execution
+        fallback_tool_message = ""
         for msg in reversed(final_messages):
             if msg.type == "tool" and msg.name in ["system_control", "manage_truck", "manage_location", "automate_shipment", "manage_delivery_order"]:
-                # tool returned a direct dict or stringified JSON
                 try:
                     output = msg.content
                     if isinstance(output, str):
@@ -216,7 +230,7 @@ async def chat_with_ai(request: ChatRequest):
                     if isinstance(output, dict):
                         ui_action = output.get("ui_action")
                         if ui_action and ui_action != "ERROR":
-                            reply_text = output.get("message", "Baik, saya akan memproses permintaan Anda.")
+                            fallback_tool_message = output.get("message", "")
                             command_payload = {
                                 "type": ui_action,
                                 "target": output.get("target", "dashboard")
@@ -227,13 +241,11 @@ async def chat_with_ai(request: ChatRequest):
                                 command_payload["data"] = output.get("data")
                             break
                         elif ui_action == "ERROR":
-                            if not reply_text:
-                                reply_text = output.get("message", "Terjadi kesalahan saat memproses data.")
-                            command_payload = None
+                            if not fallback_tool_message:
+                                fallback_tool_message = output.get("message", "Terjadi kesalahan saat memproses data.")
                 except Exception:
                     pass
             elif msg.type == "tool" and "SUCCESS:PREFILL:" in str(msg.content):
-                # Fallback for PREFILL tools
                 try:
                     obs_str = str(msg.content).strip()
                     parts = obs_str.split(":", 3)
@@ -246,15 +258,20 @@ async def chat_with_ai(request: ChatRequest):
                         "target": target,
                         "data": payload_data
                     }
-                    reply_text = "Baik, saya akan menyiapkan data yang Anda minta."
+                    fallback_tool_message = "Baik, saya akan menyiapkan data yang Anda minta."
                     break
                 except Exception:
                     pass
-            elif msg.type == "ai" and msg.content and not command_payload:
-                reply_text = _content_to_str(msg.content)
 
-        if not reply_text and command_payload:
+        # 3. Determine final reply text (prefer AI-generated response over hardcoded tool message)
+        if ai_reply_text:
+            reply_text = ai_reply_text
+        elif fallback_tool_message:
+            reply_text = fallback_tool_message
+        elif command_payload:
             reply_text = "Baik, saya akan mengarahkan Anda ke halaman yang relevan."
+        else:
+            reply_text = "Maaf, saya tidak dapat memproses permintaan tersebut."
 
         return {
             "reply": reply_text,
