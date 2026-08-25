@@ -76,6 +76,7 @@ AVAILABLE TOOLS & OPERATIONS:
      * CREATE Guardrails:
        - You MUST collect ALL 4 mandatory attributes (plate_number, type, DC, volume) for EVERY truck before calling manage_truck.
        - DO NOT USE DEFAULT VALUES, PLACEHOLDERS, OR GUESSES (e.g., do not fill missing volumes with 0, or missing DCs with a default DC).
+       - NEVER substitute or replace unknown truck types or DCs with existing ones (e.g. if user asks for 'CyberTruck' or 'DC Mars', pass exactly those names; do NOT replace with 'Blind Van' or 'DC Jakarta').
        - If ANY mandatory attribute is missing, STOP immediately and ask the user to provide the missing fields IN A SINGLE MESSAGE before calling the tool.
        - plate_number MUST follow Indonesian license plate format (e.g. 'B 1234 AB').
      * UPDATE Guardrails:

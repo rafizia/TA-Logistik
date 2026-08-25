@@ -81,6 +81,7 @@ class TestManageTruck:
                 return "[(1, 'DC Jakarta'), (2, 'DC Surabaya')]"
             return "[]"
         db.run.side_effect = mock_run
+        db._engine.connect.return_value.__enter__.return_value.execute.return_value.fetchone.return_value = None
         return db
 
     @pytest.fixture
@@ -117,6 +118,44 @@ class TestManageTruck:
         assert result["status"] == "success"
         assert result["data"][0]["type_id"] == 1
         assert result["data"][0]["dc_id"] == 1
+
+    def test_create_truck_duplicate_in_db(self, manage_truck_tool, mock_db):
+        mock_db._engine.connect.return_value.__enter__.return_value.execute.return_value.fetchone.return_value = (99,)
+        data_input = {
+            "action": "CREATE",
+            "data": [{
+                "plate_number": "B 1234 CD",
+                "type_id": 1,
+                "dc_id": 1,
+                "max_individual_capacity_volume": 1200.0
+            }]
+        }
+        result = manage_truck_tool.invoke(data_input)
+        assert result["status"] == "error"
+        assert "already exists in database" in result["message"]
+
+    def test_create_truck_duplicate_in_batch(self, manage_truck_tool, mock_db):
+        mock_db._engine.connect.return_value.__enter__.return_value.execute.return_value.fetchone.return_value = None
+        data_input = {
+            "action": "CREATE",
+            "data": [
+                {
+                    "plate_number": "B 1234 CD",
+                    "type_id": 1,
+                    "dc_id": 1,
+                    "max_individual_capacity_volume": 1200.0
+                },
+                {
+                    "plate_number": "B 1234 CD",
+                    "type_id": 2,
+                    "dc_id": 1,
+                    "max_individual_capacity_volume": 2000.0
+                }
+            ]
+        }
+        result = manage_truck_tool.invoke(data_input)
+        assert result["status"] == "error"
+        assert "duplicate plate_number" in result["message"]
 
     def test_create_truck_missing_required_field(self, manage_truck_tool):
         # Missing max_individual_capacity_volume

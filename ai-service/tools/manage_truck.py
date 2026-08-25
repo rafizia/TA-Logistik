@@ -85,7 +85,7 @@ class ManageTruckInput(BaseModel):
 
 
 def _resolve_names_to_ids(truck_list: list[dict], db) -> list[str]:
-    """Resolve type_name -> type_id and dc_name -> dc_id."""
+    """Resolve and validate type_name/type_id and dc_name/dc_id against database records."""
     resolve_errors = []
  
     try:
@@ -100,27 +100,49 @@ def _resolve_names_to_ids(truck_list: list[dict], db) -> list[str]:
     except (ValueError, SyntaxError) as e:
         return [f"Failed to parse reference data: {str(e)}"]
  
-    type_map = {str(name).lower(): tid for tid, name in types_list}
-    dc_map = {str(name).lower(): did for did, name in dcs_list}
+    type_map = {str(name).strip().lower(): tid for tid, name in types_list}
+    valid_type_ids = {tid for tid, _ in types_list}
+    dc_map = {str(name).strip().lower(): did for did, name in dcs_list}
+    valid_dc_ids = {did for did, _ in dcs_list}
+
+    type_options = ", ".join(name for _, name in types_list)
+    dc_options = ", ".join(name for _, name in dcs_list)
  
     for idx, truck in enumerate(truck_list):
-        if not truck.get("type_id") and truck.get("type_name"):
-            t_name = str(truck["type_name"]).lower()
-            if t_name in type_map:
-                truck["type_id"] = type_map[t_name]
+        label = f"Truck #{idx+1}"
+
+        # Validate / Resolve Truck Type
+        t_name = truck.get("type_name")
+        t_id = truck.get("type_id")
+        if t_name:
+            key = str(t_name).strip().lower()
+            if key in type_map:
+                truck["type_id"] = type_map[key]
             else:
                 resolve_errors.append(
-                    f"Truck #{idx+1}: Truck type '{truck['type_name']}' not found. "
-                    f"Options: {', '.join(n for _, n in types_list)}"
+                    f"{label}: Truck type '{t_name}' not found in database. Options: {type_options}"
                 )
-        if not truck.get("dc_id") and truck.get("dc_name"):
-            d_name = str(truck["dc_name"]).lower()
-            if d_name in dc_map:
-                truck["dc_id"] = dc_map[d_name]
+        elif t_id is not None:
+            if t_id not in valid_type_ids:
+                resolve_errors.append(
+                    f"{label}: Truck type ID {t_id} not found in database. Options: {type_options}"
+                )
+
+        # Validate / Resolve Distribution Center (DC)
+        d_name = truck.get("dc_name")
+        d_id = truck.get("dc_id")
+        if d_name:
+            key = str(d_name).strip().lower()
+            if key in dc_map:
+                truck["dc_id"] = dc_map[key]
             else:
                 resolve_errors.append(
-                    f"Truck #{idx+1}: DC '{truck['dc_name']}' not found. "
-                    f"Options: {', '.join(n for _, n in dcs_list)}"
+                    f"{label}: DC '{d_name}' not found in database. Options: {dc_options}"
+                )
+        elif d_id is not None:
+            if d_id not in valid_dc_ids:
+                resolve_errors.append(
+                    f"{label}: DC ID {d_id} not found in database. Options: {dc_options}"
                 )
  
     return resolve_errors
@@ -135,14 +157,25 @@ def get_manage_truck_tool(db):
     @tool(args_schema=ManageTruckInput)
     def manage_truck(action: str, data: List[TruckItemInput]) -> dict:
         """
-        Use this tool to CREATE or UPDATE truck data.
-        - action: 'CREATE' or 'UPDATE'
-        - data: list of truck objects; each item can use type_name/dc_name
-          as an alternative to type_id/dc_id.
-        This tool does not save directly to the database — the result is sent
-        to the UI form page for user confirmation.
+        Use this tool to prepare truck data for CREATE or UPDATE and redirect the user to the review page.
+        - action: 'CREATE' (requires plate_number, type_name/type_id, dc_name/dc_id, max_individual_capacity_volume)
+                  'UPDATE' (requires plate_number or id, plus updatable fields: dc_name/dc_id, first_status, second_status).
+        - data: ALWAYS a list/array of truck objects (even for a single truck).
+        
+        Examples:
+        - Create Single Truck:
+          manage_truck(action="CREATE", data=[{"plate_number": "B 1234 AB", "type_name": "Blind Van", "dc_name": "DC Jakarta", "max_individual_capacity_volume": 1500000}])
+        - Update Truck Status:
+          manage_truck(action="UPDATE", data=[{"plate_number": "B 1234 AB", "first_status": "UNAVAILABLE", "second_status": "MAINTENANCE"}])
+        - Bulk Create Trucks:
+          manage_truck(action="CREATE", data=[{"plate_number": "B 1234 AB", "type_name": "CDD", "dc_name": "DC Jakarta", "max_individual_capacity_volume": 1000000}, {"plate_number": "D 5678 CD", "type_name": "CDE", "dc_name": "DC Bandung", "max_individual_capacity_volume": 2000000}])
         """
         try:
+            from context import request_role
+            role = (request_role.get() or "").strip().lower()
+            if role and "super" not in role:
+                return _error("Access Denied. You do not have permission to perform this action.")
+
             items: list[dict] = [
                 item.model_dump(exclude_unset=True) if isinstance(item, BaseModel) else dict(item)
                 for item in data
@@ -152,27 +185,49 @@ def get_manage_truck_tool(db):
                 return _error("Failed to process data:\n" + "\n".join(resolve_errors))
 
             if action.upper() == "CREATE":
-                return _handle_create(items)
+                return _handle_create(items, db)
             else:
                 return _handle_update(items, db)
 
         except Exception as e:
             return _error(f"Unexpected error: {e}")
 
-    def _handle_create(items: list[dict]) -> dict:
+    def _handle_create(items: list[dict], db) -> dict:
         validated, errors = [], []
+        seen_plates = set()
+        sql_check = text("SELECT id FROM truck WHERE plate_number = :plate")
+
         for idx, truck in enumerate(items):
             label = f"Truck #{idx + 1}"
             missing = [f for f in CREATE_REQUIRED_FIELDS if not truck.get(f)]
             if missing:
                 errors.append(f"{label}: missing required field ({', '.join(missing)})")
                 continue
-            truck["plate_number"] = truck["plate_number"].strip().upper()
+
+            plate = truck["plate_number"].strip().upper()
+            truck["plate_number"] = plate
+
+            # Check for duplicates in the current request batch
+            if plate in seen_plates:
+                errors.append(f"{label}: duplicate plate_number '{plate}' found in input batch.")
+                continue
+            seen_plates.add(plate)
+
+            # Check if plate_number already exists in database
+            try:
+                with db._engine.connect() as conn:
+                    existing = conn.execute(sql_check, {"plate": plate}).fetchone()
+                if existing:
+                    errors.append(f"{label}: truck with plate_number '{plate}' already exists in database (ID: {existing[0]}).")
+                    continue
+            except Exception:
+                pass
+
             truck.setdefault("first_status", "AVAILABLE")
             validated.append(truck)
 
         if errors:
-            return _error("Invalid data:\n" + "\n".join(errors))
+            return _error("Validation error for CREATE:\n" + "\n".join(errors))
 
         return _success_prefill(
             "bulk_add_truck", validated,

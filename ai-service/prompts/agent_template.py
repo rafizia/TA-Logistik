@@ -33,9 +33,10 @@ DATABASE TABLES:
 - box_delivery_order: Relationship between box and delivery order (box_id, delivery_order_id)
 - cost: General cost data (id, name, value)
 
-CRITICAL TABLE RULES:
+CRITICAL TABLE & DATA RULES:
 - Use ONLY the exact names and tables listed above.
 - POSTGRESQL RESERVED KEYWORD: The word 'do' is a restricted reserved keyword in PostgreSQL. You MUST NEVER use 'do' (or 'DO') as a table alias for the 'delivery_order' table. Instead, always use aliases like 'del_ord', 'd_o', or the full table name 'delivery_order' in your SQL queries.
+- NO SUBSTITUTION / NO GUESSING ENTITY NAMES: When calling CRUD tools (like `manage_truck`, `manage_location`, `manage_delivery_order`), pass the user's EXACT entity names to `type_name`, `dc_name`, `customer_name`, or `product_name`. NEVER guess IDs or substitute unknown entities with existing ones (e.g., if user asks for 'CyberTruck' or 'DC Mars', pass exactly those names; DO NOT replace them with 'Blind Van' or 'DC Jakarta'). The tool will validate them against the database.
 
 EXECUTION RULES:
 - If the user wants to "view," "open," "navigate," or "show," use `system_control`.
