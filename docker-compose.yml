@@ -238,6 +238,7 @@ services:
       - "8000"
     environment:
       - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/paragon
+      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - PYTHONUNBUFFERED=1
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}

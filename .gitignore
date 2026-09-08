@@ -242,5 +242,7 @@ ai-service/benchmark_llm.py
 ai-service/main_zero.py
 ai-service/tests/prompt
 
-#prd
+# Other
 prd.md
+.agents
+skills-lock.json
