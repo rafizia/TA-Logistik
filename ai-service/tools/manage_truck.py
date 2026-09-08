@@ -84,29 +84,14 @@ class ManageTruckInput(BaseModel):
         return self
 
 
+from .db_utils import get_reference_mapping
+
 def _resolve_names_to_ids(truck_list: list[dict], db) -> list[str]:
     """Resolve and validate type_name/type_id and dc_name/dc_id against database records."""
     resolve_errors = []
- 
-    try:
-        types_str = db.run("SELECT id, name FROM truck_type")
-        dcs_str = db.run("SELECT id, name FROM dc")
-    except Exception as e:
-        return [f"Failed to retrieve reference data from database: {str(e)}"]
- 
-    try:
-        types_list = ast.literal_eval(types_str)
-        dcs_list = ast.literal_eval(dcs_str)
-    except (ValueError, SyntaxError) as e:
-        return [f"Failed to parse reference data: {str(e)}"]
- 
-    type_map = {str(name).strip().lower(): tid for tid, name in types_list}
-    valid_type_ids = {tid for tid, _ in types_list}
-    dc_map = {str(name).strip().lower(): did for did, name in dcs_list}
-    valid_dc_ids = {did for did, _ in dcs_list}
 
-    type_options = ", ".join(name for _, name in types_list)
-    dc_options = ", ".join(name for _, name in dcs_list)
+    type_map, valid_type_ids, type_options = get_reference_mapping(db, "truck_type")
+    dc_map, valid_dc_ids, dc_options = get_reference_mapping(db, "dc")
  
     for idx, truck in enumerate(truck_list):
         label = f"Truck #{idx+1}"

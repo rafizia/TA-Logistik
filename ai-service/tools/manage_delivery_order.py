@@ -92,18 +92,16 @@ class ManageDeliveryOrderInput(BaseModel):
     )
 
 
+from .db_utils import get_reference_mapping
+
+
 def _resolve_do_names_to_ids(do_data: dict, db) -> list[str]:
     """
     Resolve and strictly validate customer_name/customer_id, dc_name/dc_id, and product_name/product_id in-place.
     """
     errors: list[str] = []
     try:
-        customers_str = db.run("SELECT id, name FROM customer")
-        customers_list: list[tuple] = ast.literal_eval(customers_str)
-        cust_map = {str(name).strip().lower(): cid for cid, name in customers_list}
-        valid_cust_ids = {cid for cid, _ in customers_list}
-        cust_options = ", ".join(name for _, name in customers_list)
-
+        cust_map, valid_cust_ids, cust_options = get_reference_mapping(db, "customer")
         c_name = do_data.get("customer_name")
         c_id = do_data.get("customer_id")
         if c_name:
@@ -116,12 +114,7 @@ def _resolve_do_names_to_ids(do_data: dict, db) -> list[str]:
             if c_id not in valid_cust_ids:
                 errors.append(f"Customer ID {c_id} not found in database. Options: {cust_options}")
 
-        dcs_str = db.run("SELECT id, name FROM dc")
-        dcs_list: list[tuple] = ast.literal_eval(dcs_str)
-        dc_map = {str(name).strip().lower(): did for did, name in dcs_list}
-        valid_dc_ids = {did for did, _ in dcs_list}
-        dc_options = ", ".join(name for _, name in dcs_list)
-
+        dc_map, valid_dc_ids, dc_options = get_reference_mapping(db, "dc")
         d_name = do_data.get("dc_name")
         d_id = do_data.get("dc_id")
         if d_name:
@@ -135,12 +128,7 @@ def _resolve_do_names_to_ids(do_data: dict, db) -> list[str]:
                 errors.append(f"DC ID {d_id} not found in database. Options: {dc_options}")
 
         if "product_lines" in do_data and isinstance(do_data["product_lines"], list):
-            products_str = db.run("SELECT id, name FROM product")
-            products_list: list[tuple] = ast.literal_eval(products_str)
-            prod_map = {str(name).strip().lower(): pid for pid, name in products_list}
-            valid_prod_ids = {pid for pid, _ in products_list}
-            prod_options = ", ".join(name for _, name in products_list)
-
+            prod_map, valid_prod_ids, prod_options = get_reference_mapping(db, "product")
             for idx, pl in enumerate(do_data["product_lines"]):
                 if isinstance(pl, dict):
                     p_name = pl.get("product_name")

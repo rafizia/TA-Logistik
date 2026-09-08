@@ -1,285 +1,91 @@
-import os
-import json
-from sqlalchemy import text
-from dotenv import load_dotenv
+import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from langchain_ollama import ChatOllama
-from langchain_google_genai import ChatGoogleGenerativeAI
-from pydantic import BaseModel
 from langchain_community.utilities.sql_database import SQLDatabase
-from langchain_community.agent_toolkits import SQLDatabaseToolkit
-from langchain_core.prompts import PromptTemplate
-from prompts.agent_template import AGENT_TEMPLATE
-from tools import use_tools
-from langchain.agents import create_agent, AgentState
-from langchain.agents.middleware import before_model
-from langchain_core.messages import RemoveMessage, trim_messages as lc_trim_messages
-from typing import Any, Optional
-from langgraph.graph.message import REMOVE_ALL_MESSAGES
-from langgraph.checkpoint.memory import InMemorySaver
 
-load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+from config import get_settings
+from api import api_router
+from services import create_chat_agent
 
-app = FastAPI()
+# Configure logging
+settings = get_settings()
+logging.basicConfig(
+    level=getattr(logging, settings.log_level.upper(), logging.INFO),
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("ai_service")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    FastAPI Lifespan Context Manager.
+    Initializes database connections, builds the AI Agent graph, and manages clean shutdown.
+    """
+    logger.info("Initializing AI Service...")
+    settings_provider = app.dependency_overrides.get(get_settings, get_settings)
+    current_settings = settings_provider()
+
+    # Initialize SQLDatabase connection
+    if current_settings.environment != "test":
+        try:
+            db = SQLDatabase.from_uri(current_settings.database_url)
+            app.state.db = db
+            logger.info("Database connection successfully established.")
+        except Exception as e:
+            logger.warning(f"Database connection could not be established at startup: {e}")
+            app.state.db = None
+
+        # Instantiate and compile LangGraph Chat Agent
+        if app.state.db is not None:
+            try:
+                agent = create_chat_agent(current_settings, app.state.db)
+                app.state.agent = agent
+                logger.info("Chat agent compiled and ready.")
+            except Exception as e:
+                logger.error(f"Failed to create chat agent at startup: {e}")
+                app.state.agent = None
+        else:
+            app.state.agent = None
+    else:
+        logger.info("Test environment active: Skipping real DB and agent initialization in lifespan.")
+
+    yield
+
+    # Clean shutdown logic
+    logger.info("Shutting down AI Service...")
+    app.state.db = None
+    app.state.agent = None
+
+
+app = FastAPI(
+    title="Logistics AI Service",
+    description="Intelligent Conversational Agent & Route Optimization Assistant",
+    version="0.1.0",
+    lifespan=lifespan,
+)
+
+# Configure CORS Middleware
+origins = settings.allowed_origins
+allow_credentials = False if "*" in origins else True
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=origins,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Database configuration
-# - Inside Docker: host 'db', port 5432
-# - Local Dev: host 'localhost', port 5433
-default_db_url = "postgresql+psycopg2://postgres:postgres@localhost:5433/paragon"
-pg_uri = os.getenv("DATABASE_URL", default_db_url)
-
-if pg_uri.startswith("postgresql://"):
-    pg_uri = pg_uri.replace("postgresql://", "postgresql+psycopg2://", 1)
-
-db = SQLDatabase.from_uri(pg_uri)
-
-'''
-_ollama_url   = os.getenv("OLLAMA_BASE_URL", "http://e2e_logistics_ollama:11434")
-_ollama_model = os.getenv("OLLAMA_MODEL", "qwen3.5:9b")
-llm = ChatOllama(model=_ollama_model, base_url=_ollama_url, keep_alive="5m")
-
-'''
-# Google Gemini API configuration:
-google_api_key = os.getenv("GOOGLE_API_KEY")
-llm = ChatGoogleGenerativeAI(
-    model="gemini-3.5-flash-lite",
-    google_api_key=google_api_key,
-    temperature=0
-)
+# Include All API Routers
+app.include_router(api_router)
 
 
-tools   = use_tools(db)
-toolkit = SQLDatabaseToolkit(db=db, llm=llm)
-
-PROMPT = PromptTemplate(
-    input_variables=["input", "agent_scratchpad", "tools", "tool_names", "history"],
-    template=AGENT_TEMPLATE
-)
-
-all_tools = tools + toolkit.get_tools()
-sys_prompt = AGENT_TEMPLATE
-memory = InMemorySaver()
-
-@before_model
-def trim_messages(state: AgentState, runtime: Any) -> dict | None:
-    """Keep only the messages that fit inside the context window based on max tokens."""
-    messages = state.get("messages", [])
-    
-    trimmed_messages = lc_trim_messages(
-        messages,
-        max_tokens=80000,
-        strategy="last",
-        token_counter="approximate",
-        start_on="human",
-        include_system=True,
-        allow_partial=False
-    )
-
-    if len(trimmed_messages) == len(messages):
-        return None
-
+@app.get("/", tags=["General"])
+def root():
     return {
-        "messages": [
-            RemoveMessage(id=REMOVE_ALL_MESSAGES),
-            *trimmed_messages
-        ]
+        "service": "Logistics AI Service",
+        "status": "online",
+        "docs": "/docs",
     }
-
-agent = create_agent(
-    model=llm,
-    tools=all_tools,
-    system_prompt=sys_prompt,
-    middleware=[trim_messages],
-    checkpointer=memory,
-    debug=False
-)
-
-class UserContext(BaseModel):
-    role: Optional[str] = None
-    dc_id: Optional[int] = None
-    dc_name: Optional[str] = None
-    token: Optional[str] = None
-
-class ChatRequest(BaseModel):
-    query: str
-    session_id: str = "default_session"
-    user_context: Optional[UserContext] = None
-
-@app.post("/chat")
-async def chat_with_ai(request: ChatRequest):
-    try:
-        from context import request_token, request_dc_id, request_role
-        if request.user_context and request.user_context.token:
-            request_token.set(request.user_context.token)
-        else:
-            request_token.set("")
-        request_dc_id.set(request.user_context.dc_id if request.user_context else None)
-        request_role.set(request.user_context.role if request.user_context else None)
-        input_messages = [{"role": "user", "content": request.query}]
-
-        # Inject user context (DC info & RBAC) as a system message prefix
-        if request.user_context:
-            ctx = request.user_context
-            role_name = ctx.role or ("Admin DC" if ctx.dc_id else "Super")
-            if ctx.dc_id or "super" not in (role_name.lower()):
-                dc_info_parts = [f"dc_id={ctx.dc_id}"] if ctx.dc_id else []
-                if ctx.dc_name:
-                    dc_info_parts.append(f"dc_name='{ctx.dc_name}'")
-                elif ctx.dc_id:
-                    try:
-                        sql_dc = text("SELECT name FROM dc WHERE id = :dc_id")
-                        with db._engine.connect() as conn:
-                            row = conn.execute(sql_dc, {"dc_id": ctx.dc_id}).fetchone()
-                        if row:
-                            dc_info_parts.append(f"dc_name='{row[0]}'")
-                    except Exception:
-                        pass
-                dc_str = f" Their Distribution Center (DC) is fixed: {', '.join(dc_info_parts)}." if dc_info_parts else ""
-                dc_context_msg = (
-                    f"[SYSTEM CONTEXT] The current user is logged in as role '{role_name}'.{dc_str} "
-                    f"When creating a delivery order, use this dc_id automatically.\n"
-                    f"ROLE-BASED ACCESS RESTRICTIONS FOR ADMIN DC:\n"
-                    f"- RESTRICTED / FORBIDDEN PAGES: 'customers_list', 'detail_customer', 'users_list', 'roles_list', 'add_truck', 'bulk_add_truck', 'edit_truck', 'bulk_edit_truck'.\n"
-                    f"- RESTRICTED ACTIONS: Adding or editing truck data (manage_truck is prohibited).\n"
-                    f"- CRITICAL INSTRUCTION: If the user asks to navigate to, open, add, edit, or view details of any restricted customer, user, role, or truck create/edit page, you MUST REFUSE politely in Indonesian stating that Admin DC does not have permission. NEVER call system_control or manage_truck for these restricted items!"
-                )
-            else:
-                dc_context_msg = (
-                    f"[SYSTEM CONTEXT] The current user is logged in as role '{role_name}'. They do NOT have a fixed Distribution Center (DC).\n"
-                    f"ROLE-BASED ACCESS RESTRICTIONS FOR SUPER ADMIN:\n"
-                    f"- RESTRICTED / FORBIDDEN PAGES: 'add_shipment', 'edit_shipment', 'detail_shipment', 'add_delivery_order', 'edit_delivery_order'.\n"
-                    f"- RESTRICTED ACTIONS: Creating shipments (automate_shipment) and creating/updating delivery orders (manage_delivery_order).\n"
-                    f"- CRITICAL INSTRUCTION: If the user asks to navigate to, open, create, edit, or view details of shipments, or create/edit delivery orders, you MUST REFUSE politely in Indonesian stating that Super Admin does not have permission. NEVER call system_control, automate_shipment, or manage_delivery_order for these restricted items!"
-                )
-
-            input_messages = [
-                {"role": "system", "content": dc_context_msg},
-                {"role": "user", "content": request.query}
-            ]
-
-        config = {"configurable": {"thread_id": request.session_id}}
-
-        response = await agent.ainvoke(
-            {"messages": input_messages}, 
-            config=config
-        )
-
-        # 🟢 LOG TRACE BERPIKIR & TOOL CALL KE TERMINAL
-        print("\n" + "="*50)
-        print("🧠 --- TRACE EKSEKUSI AI ---")
-        for msg in response.get("messages", []):
-            if msg.type == "ai":
-                if getattr(msg, "tool_calls", None):
-                    print(f"🤖 [AI CALL TOOL]: {msg.tool_calls}")
-                elif msg.content:
-                    print(f"🤖 [AI THINKING/REPLY]: {msg.content}")
-            elif msg.type == "tool":
-                print(f"🛠️ [TOOL RESULT ({msg.name})]: {msg.content}")
-        print("="*50 + "\n")
-        
-        final_messages = response.get("messages", [])
-        command_payload = None
-
-        def _content_to_str(content) -> str:
-            """Normalise AI message content (str | list[dict]) → plain string."""
-            if isinstance(content, str):
-                return content
-            if isinstance(content, list):
-                parts = []
-                for part in content:
-                    if isinstance(part, str):
-                        parts.append(part)
-                    elif isinstance(part, dict):
-                        parts.append(part.get("text") or str(part))
-                    else:
-                        parts.append(str(part))
-                return "".join(parts)
-            return str(content)
-
-        # 1. Extract the latest AI generated text response
-        ai_reply_text = ""
-        for msg in reversed(final_messages):
-            if msg.type == "ai" and msg.content:
-                text_content = _content_to_str(msg.content).strip()
-                if text_content:
-                    ai_reply_text = text_content
-                    break
-
-        # 2. Extract UI command payload from tool execution
-        fallback_tool_message = ""
-        for msg in reversed(final_messages):
-            if msg.type == "tool" and msg.name in ["system_control", "manage_truck", "manage_location", "automate_shipment", "manage_delivery_order"]:
-                try:
-                    output = msg.content
-                    if isinstance(output, str):
-                        import ast
-                        try:
-                            output = json.loads(output)
-                        except json.JSONDecodeError:
-                            output = ast.literal_eval(output)
-                    
-                    if isinstance(output, dict):
-                        ui_action = output.get("ui_action")
-                        if ui_action and ui_action != "ERROR":
-                            fallback_tool_message = output.get("message", "")
-                            command_payload = {
-                                "type": ui_action,
-                                "target": output.get("target", "dashboard")
-                            }
-                            if "entity_id" in output and output["entity_id"] is not None:
-                                command_payload["data"] = {"id": output["entity_id"], "Id": output["entity_id"]}
-                            elif "data" in output and output["data"] is not None:
-                                command_payload["data"] = output.get("data")
-                            break
-                        elif ui_action == "ERROR":
-                            if not fallback_tool_message:
-                                fallback_tool_message = output.get("message", "Terjadi kesalahan saat memproses data.")
-                except Exception:
-                    pass
-            elif msg.type == "tool" and "SUCCESS:PREFILL:" in str(msg.content):
-                try:
-                    obs_str = str(msg.content).strip()
-                    parts = obs_str.split(":", 3)
-                    target = parts[2] if len(parts) > 2 else "dashboard"
-                    json_str = parts[3].strip() if len(parts) > 3 else ""
-                    payload_data = json.loads(json_str) if json_str else {}
-                    
-                    command_payload = {
-                        "type": "PREFILL",
-                        "target": target,
-                        "data": payload_data
-                    }
-                    fallback_tool_message = "Baik, saya akan menyiapkan data yang Anda minta."
-                    break
-                except Exception:
-                    pass
-
-        # 3. Determine final reply text (prefer AI-generated response over hardcoded tool message)
-        if ai_reply_text:
-            reply_text = ai_reply_text
-        elif fallback_tool_message:
-            reply_text = fallback_tool_message
-        elif command_payload:
-            reply_text = "Baik, saya akan mengarahkan Anda ke halaman yang relevan."
-        else:
-            reply_text = "Maaf, saya tidak dapat memproses permintaan tersebut."
-
-        return {
-            "reply": reply_text,
-            "command": command_payload
-        }
-    except Exception as e:
-        print(f"[ERROR] chat_with_ai: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return {"error": str(e)}
-
