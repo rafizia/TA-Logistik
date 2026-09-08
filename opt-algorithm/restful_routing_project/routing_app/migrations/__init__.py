@@ -1,2 +1,0 @@
-"""Routing app migrations package."""
-

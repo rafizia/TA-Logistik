@@ -1,5 +1,4 @@
 from datetime import datetime, time, timedelta
-from decimal import Decimal, ROUND_HALF_UP
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from sklearn.preprocessing import MinMaxScaler
@@ -7,8 +6,7 @@ from .nearest_neighbor import fetch_concatenate_route
 from .helper import get_distance_runner, get_directions, dbscan_cluster, handle_noise_with_kmeans, geodesic_distance
 from .google_or import google_or
 import json
-from django.utils import timezone
-from .models import Truck, Shipment
+from .models import Truck
 import pandas as pd
 import collections
 collections.Iterable = collections.abc.Iterable
@@ -43,8 +41,7 @@ def get_delivery_orders__with_demand_dataframe(delivery_orders):
         'volume' :[],
         'quantity' : [],
         'loc_dest_id' : [],
-        'demand':[],
-        'shipment_id': []
+        'demand':[]
     }
     for do in delivery_orders:
         df_delivery_orders['id'].append(do['id'])
@@ -53,7 +50,6 @@ def get_delivery_orders__with_demand_dataframe(delivery_orders):
         df_delivery_orders['quantity'].append(do['quantity'])
         df_delivery_orders['loc_dest_id'].append(do['loc_dest']['id'])
         df_delivery_orders['demand'].append(do['demand'])
-        df_delivery_orders['shipment_id'].append(do.get('shipment_id'))
 
     return pd.DataFrame(df_delivery_orders)
 
@@ -289,15 +285,13 @@ def priority_optimization(request, format=None):
                 _, times, emissions = get_distance_runner(filtered_origin_loc, priority=priority)
                 
                 times = [[t / 60.0 for t in row] for row in times]
-                
-                # Use extended time windows: 8 AM (480 min) to 5 PM (1020 min)
-                # This provides a 9-hour delivery window for all locations
-                num_locations = len(filtered_origin_loc)
-                time_windows = [(480, 1020) for _ in range(num_locations)]  # 8 AM to 5 PM for all
-                
+                time_windows = list(zip(
+                    filtered_origin_loc['open_hour'].apply(lambda x: x.hour * 60 + x.minute),
+                    filtered_origin_loc['close_hour'].apply(lambda x: x.hour * 60 + x.minute)
+                ))
                 services_time = list(filtered_origin_loc['service_time'])
                 data = {}
-                time_windows[0] = (480, 480)  # Depot starts at exactly 8 AM
+                time_windows[0] = (480,480)
                 services_time[0] = 0
                 data['time_matrix'] = times
                 data['emission_matrix'] = emissions
@@ -306,12 +300,6 @@ def priority_optimization(request, format=None):
                 data['num_vehicles'] = 1
                 data['depot'] = 0
                 data['objective_type'] = 'emission' if priority == 'emission' else 'time'
-                
-                # Log time windows for debugging
-                logger.info(f"[TRUCK {truck_counter}] Time windows being used:")
-                for idx, (tw, st) in enumerate(zip(time_windows, services_time)):
-                    loc_info = filtered_origin_loc.iloc[idx]
-                    logger.info(f"  Location {idx}: open={tw[0]}min ({tw[0]//60}:{tw[0]%60:02d}), close={tw[1]}min ({tw[1]//60}:{tw[1]%60:02d}), service_time={st}min, is_dc={loc_info.get('is_dc', False)}")
                 
                 log_step(logger, f"[TRUCK {truck_counter}] Running Google OR-Tools optimization")
                 result = google_or(data=data)
@@ -336,7 +324,6 @@ def priority_optimization(request, format=None):
                 total_time = 0
                 total_time_with_waiting = 0
                 total_distance = 0
-                total_emission = 0  # Track total CO2 emissions in grams
                 
                 log_step(logger, f"[TRUCK {truck_counter}] Validating routes and calculating ETAs")
                 logger.info(f"[TRUCK {truck_counter}] reachable_locations_index from OR-Tools: {reachable_locations_index}")
@@ -387,13 +374,6 @@ def priority_optimization(request, format=None):
                             total_time_with_waiting += estimated_travel_time
                         total_time += estimated_travel_time
                         total_distance += estimated_travel_distance
-                        
-                        # Calculate emission for this segment if in emission mode
-                        if priority == 'emission':
-                            segment_emission = emissions[prev_loc_index][loc_index]
-                            total_emission += segment_emission
-                            logger.debug(f"[TRUCK {truck_counter}] Segment emission: {segment_emission}g CO2 (from loc {prev_loc_index} to {loc_index})")
-                        
                         prev_loc_index = loc_index
                     else:
                         actual_unreachable_locations_index.append(loc_index)
@@ -453,28 +433,6 @@ def priority_optimization(request, format=None):
                     logger.info(f"[TRUCK {truck_counter}] Added delivery_order: do_id={do_id}, loc_dest_id={loc_dest_id}, eta={eta_value}")
                 
                 logger.info(f"[TRUCK {truck_counter}] Final delivery_orders_with_eta count: {len(delivery_orders_with_eta)}")
-
-                shipment_ids = []
-                if 'shipment_id' in valid_dos.columns:
-                    shipment_ids = (
-                        valid_dos['shipment_id']
-                        .dropna()
-                        .unique()
-                        .tolist()
-                    )
-                
-                persist_shipment_metrics(
-                    shipment_ids=shipment_ids,
-                    total_distance_m=total_distance,
-                    total_time_min=total_time,
-                    total_time_with_waiting_min=total_time_with_waiting,
-                    total_emission_g=total_emission if priority == 'emission' else None,
-                    priority=priority,
-                )
-                
-                # Log total emission if in emission mode
-                if priority == 'emission':
-                    logger.info(f"[TRUCK {truck_counter}] Total emission: {total_emission}g CO2 ({total_emission/1000:.2f}kg)")
                 
                 shipment_entry = {
                         "id_truck": truck.get_id(),
@@ -484,7 +442,6 @@ def priority_optimization(request, format=None):
                         "total_time": total_time,       
                         "total_time_with_waiting": total_time_with_waiting,
                         "total_dist": total_distance,
-                        "total_emission": total_emission if priority == 'emission' else None,
                         "additional_info" : loc_dest_info,
                         "current_capacity": truck.get_current_capacity(),
                         "max_capacity": truck.get_max_capacity(),   
@@ -526,64 +483,6 @@ def priority_optimization(request, format=None):
 
 def relative_position(longitude, reference_longitude):
     return '+' if longitude > reference_longitude else '-'
-
-def _decimal_or_none(value):
-    if value is None:
-        return None
-    return Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
-def _normalize_shipment_ids(shipment_ids):
-    normalized_ids = set()
-    for raw_id in shipment_ids or []:
-        try:
-            if raw_id is None:
-                continue
-            normalized_ids.add(int(raw_id))
-        except (TypeError, ValueError):
-            logger.warning(f"[ShipmentMetrics] Unable to parse shipment id value: {raw_id}")
-    return sorted(normalized_ids)
-
-def persist_shipment_metrics(
-    shipment_ids,
-    total_distance_m,
-    total_time_min,
-    total_time_with_waiting_min,
-    total_emission_g,
-    priority,
-):
-    """
-    Persist aggregated routing metrics into the Shipment table.
-
-    To avoid double counting we only persist when the optimized route
-    maps to a single shipment id.
-    """
-    normalized_ids = _normalize_shipment_ids(shipment_ids)
-    if not normalized_ids:
-        logger.debug("[ShipmentMetrics] No shipment ids available for persistence; skipping")
-        return
-
-    if len(normalized_ids) > 1:
-        logger.warning(f"[ShipmentMetrics] Multiple shipment ids on a single route {normalized_ids}; skipping persistence")
-        return
-
-    shipment_id = normalized_ids[0]
-    payload = {
-        "total_distance_m": int(round(total_distance_m)) if total_distance_m is not None else None,
-        "total_travel_time_min": _decimal_or_none(total_time_min),
-        "total_travel_time_with_waiting_min": _decimal_or_none(total_time_with_waiting_min),
-        "total_co2_emission_g": _decimal_or_none(total_emission_g),
-        "routing_priority": priority,
-        "routing_run_at": timezone.now(),
-    }
-
-    try:
-        updated = Shipment.objects.filter(id=shipment_id).update(**payload)
-        if updated == 0:
-            logger.warning(f"[ShipmentMetrics] No Shipment row updated for shipment_id={shipment_id}")
-        else:
-            logger.info(f"[ShipmentMetrics] Persisted routing metrics for shipment_id={shipment_id}")
-    except Exception as exc:
-        logger.error(f"[ShipmentMetrics] Failed to persist shipment_id={shipment_id}: {exc}", exc_info=True)
 
 def calculate_balance_priority(row):
     priority_value = 0.5 * row['demand_scaled'] + 0.5 * row['distance_from_origin']
