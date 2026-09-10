@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import LeafletMap from "../../components/LeafletMap";
+import GoogleMap from "../../components/GoogleMap";
 import { Modal } from "../../components/Modal";
 import axiosAuthInstance from '../../utils/axios-auth-instance';
 import { toast } from 'react-toastify';
@@ -117,7 +117,7 @@ function DetailPengiriman({ pengiriman, updatePengirimanList }) {
       ? [locationRoutes[0].latitude, locationRoutes[0].longitude]
       : [-6.2257, 106.7612];
 
-  const leafletMarkers = locationRoutes.map((route, index) => ({
+  const mapMarkers = locationRoutes.map((route, index) => ({
     lat: route.latitude,
     lng: route.longitude,
     label: index + 1,
@@ -134,12 +134,12 @@ function DetailPengiriman({ pengiriman, updatePengirimanList }) {
       <div className="bg-neutral-10 rounded-b-md p-6">
         <h2 className="text-lg font-medium mb-4">Peta Rute</h2>
         <div className="h-[400px] bg-gray-100 rounded-lg mb-4">
-          <LeafletMap
+          <GoogleMap
             center={mapCenter}
             zoom={12}
             height="400px"
             polyline={routeCoordinates}
-            markers={leafletMarkers}
+            markers={mapMarkers}
           />
         </div>
 

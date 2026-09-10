@@ -1,6 +1,6 @@
 /**
  * TypingIndicator — ditampilkan saat AI agent masih memproses respons.
- * Penting untuk UX karena inferensi LLM lokal (Ollama) bisa memakan waktu.
+ * 
  */
 export default function TypingIndicator() {
   return (

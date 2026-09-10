@@ -3,7 +3,7 @@ import { TextField } from '../../components/TextField'
 import React, { useEffect, useState } from 'react'
 import { Loading } from '../../components/Loading'
 import axiosAuthInstance from '../../utils/axios-auth-instance'
-import LeafletMap from '../../components/LeafletMap'
+import GoogleMap from '../../components/GoogleMap'
 import { useParams } from 'react-router-dom'
 
 function ViewLokasi() {
@@ -209,7 +209,7 @@ function ViewLokasi() {
                 />
 
               <div className={`w-full overflow-hidden p-2`} style={{ height: '300px' }}>
-                <LeafletMap
+                <GoogleMap
                   center={mapCenter}
                   zoom={15}
                   height="300px"

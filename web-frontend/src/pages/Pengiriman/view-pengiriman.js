@@ -7,7 +7,7 @@ import { Tab } from '@headlessui/react'
 import { classNames, formatEta, formatTravelDistance, formatTravelTime } from "../../utils/utils";
 import { useLocation, useNavigate } from "react-router-dom";
 import { BsInfoCircle } from "react-icons/bs";
-import LeafletMap from "../../components/LeafletMap";
+import GoogleMap from "../../components/GoogleMap";
 
 function ViewPengiriman() {
     const location = useLocation();
@@ -329,7 +329,7 @@ function ViewPengiriman() {
                                                                         })),
                                                                     ];
                                                                     return (
-                                                                        <LeafletMap
+                                                                        <GoogleMap
                                                                             center={manifestCenter}
                                                                             zoom={10}
                                                                             height="360px"

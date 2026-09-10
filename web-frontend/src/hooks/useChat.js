@@ -54,26 +54,7 @@ export function useChat(navigate) {
 
   /** Buat base URL AI service dari env */
   const getAiBaseUrl = () => {
-    // 1. Explicit environment override
-    if (process.env.REACT_APP_AI_URL) {
-      return process.env.REACT_APP_AI_URL;
-    }
-
-    // 2. If running web-frontend locally on port 3000, AI service is at localhost:8000
-    if (typeof window !== 'undefined' && window.location.hostname === 'localhost' && window.location.port === '3000') {
-      return 'http://localhost:8000';
-    }
-
-    // 3. If accessed through Docker Nginx reverse proxy on port 8080
-    if (typeof window !== 'undefined' && window.location.port === '8080') {
-      return '/ai';
-    }
-
-    // 4. Default fallback using backend URL or relative /ai
-    const backendUrl = process.env.REACT_APP_BACKEND_URL;
-    return backendUrl?.includes('localhost')
-      ? 'http://localhost:8000'
-      : (backendUrl || '').replace(/\/$/, '') + '/ai';
+    return process.env.REACT_APP_AI_URL;
   };
 
   // ─── Load sessions & initial history ─────────────────────────────────────
