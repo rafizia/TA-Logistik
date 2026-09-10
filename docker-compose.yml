@@ -14,7 +14,7 @@ services:
       stack: 8388608    
       nproc: 40960
     image: postgres:16
-    container_name: e2e_logistics_db
+    container_name: riim_logistics_db
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
@@ -40,7 +40,7 @@ services:
       stack: 8388608    
       nproc: 40960
     image: rabbitmq:3.13-management
-    container_name: e2e_logistics_rabbitmq
+    container_name: riim_logistics_rabbitmq
     environment:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASS}
@@ -72,7 +72,7 @@ services:
       dockerfile: Dockerfile
     pull_policy: build
     image: custom-opt-algorithm:local
-    container_name: e2e_logistics_opt_algorithm
+    container_name: riim_logistics_opt_algorithm
     depends_on:
       db:
         condition: service_healthy
@@ -98,9 +98,9 @@ services:
       dockerfile: Dockerfile
     pull_policy: build
     image: custom-api-gateway:local
-    expose:
-      - "8080"
-    container_name: e2e_logistics_api_gateway
+    ports:
+      - "28080:8080"
+    container_name: riim_logistics_api_gateway
     depends_on:
       db:
         condition: service_healthy
@@ -134,7 +134,7 @@ services:
     ports:
       - "18081:8081"
     image: custom-storage:local
-    container_name: e2e_logistics_storage_service
+    container_name: riim_logistics_storage_service
     volumes:
       - storage_uploads:/app/uploads
     environment:
@@ -153,7 +153,7 @@ services:
       dockerfile: Dockerfile
     pull_policy: build
     image: custom-tmslastmile-worker:local
-    container_name: e2e_logistics_worker
+    container_name: riim_logistics_worker
     environment:
       - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/
       - EXCHANGE=box_exchange
@@ -187,12 +187,13 @@ services:
         REACT_APP_BACKEND_URL: ${REACT_APP_BACKEND_URL}
     pull_policy: build
     image: custom-web-frontend:local
-    container_name: e2e_logistics_frontend
-    expose:
-      - "3000"
+    container_name: riim_logistics_frontend
+    ports:
+      - "13000:3000"
     environment:
       - REACT_APP_GOOGLE_MAPS_KEY=${REACT_APP_GOOGLE_MAPS_KEY}
       - REACT_APP_BACKEND_URL=${REACT_APP_BACKEND_URL}
+      - REACT_APP_AI_URL=${REACT_APP_AI_URL}
     restart: always
     networks:
       - tms_net
@@ -206,7 +207,7 @@ services:
       dockerfile: Dockerfile.gpu
     pull_policy: build
     image: custom-ml-service:local
-    container_name: e2e_logistics_ml_service
+    container_name: riim_logistics_ml_service
     profiles:
       - "ml"
     ports:
@@ -233,33 +234,15 @@ services:
     security_opt:
       - seccomp=unconfined
     build: ./ai-service
-    container_name: e2e_logistics_ai_service
-    expose:
-      - "8000"
-    environment:
-      - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/paragon
-      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - PYTHONUNBUFFERED=1
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
-      - OLLAMA_MODEL=${OLLAMA_MODEL}
+    container_name: riim_logistics_ai_service
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./ai-service/.env
     networks:
       - tms_net
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
       - db
-
-  # Reverse Proxy
-  nginx:
-    image: nginx:alpine
-    container_name: e2e_logistics_nginx
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      - web_frontend
-      - api_gateway
-    networks:
-      - tms_net
+    restart: always
