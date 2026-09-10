@@ -7,7 +7,6 @@ import { Loading } from '../../components/Loading';
 import { FiCheckSquare } from 'react-icons/fi';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axiosAuthInstance from '../../utils/axios-auth-instance';
-import { toast } from 'react-toastify';
 import jwtDecode from 'jwt-decode';
 function ResultBuatPengiriman() {
   const [selectedPengiriman, setSelectedPengiriman] = useState(null);
@@ -16,6 +15,9 @@ function ResultBuatPengiriman() {
   const [loading, setLoading] = useState(false);
   const [pengirimanList, setPengirimanList] = useState([]);
   const [failedDeliveryOrders, setFailedDeliveryOrders] = useState([]);
+  const [isOpenSuccess, setIsOpenSuccess] = useState(false);
+  const [isOpenInfo, setIsOpenInfo] = useState(false);
+  const [isOpenError, setIsOpenError] = useState(false);
 
   const navigate = useNavigate();
 
@@ -46,31 +48,33 @@ function ResultBuatPengiriman() {
   console.log('Current pengirimanList:', pengirimanList)
   console.log('Current failedDeliveryOrders:', failedDeliveryOrders)
 
+  const navigateToPengiriman = () => {
+    let userRole = '';
+    const token = sessionStorage.getItem('token');
+    if (token) {
+      const decodedToken = jwtDecode(token);
+      userRole = decodedToken.role?.name;
+    }
+    const basePath = userRole === 'Super' ? '/administrator' : '';
+    navigate(`${basePath}/pengiriman`);
+  };
+
   const handleSimpanPengiriman = async () => {
     try {
       setLoading(true);
-      const token = sessionStorage.getItem('token');
       // Filter only shipments that haven't been saved yet
       const unsavedShipments = pengirimanList.filter(p => p.status !== 'saved');
       if (unsavedShipments.length > 0) {
         await axiosAuthInstance.post('/priority-opt/bulk-save', { shipments: unsavedShipments });
-        toast.success('Semua pengiriman berhasil disimpan!');
+        setIsOpenSuccess(true);
       } else {
-        toast.info('Tidak ada pengiriman baru yang perlu disimpan.');
+        setIsOpenInfo(true);
       }
       setModalKonfirmasi(false);
       
-      let userRole = '';
-      if (token) {
-        const decodedToken = jwtDecode(token);
-        userRole = decodedToken.role?.name;
-      }
-      const basePath = userRole === 'Super' ? '/administrator' : '';
-      navigate(`${basePath}/pengiriman`);
-      
     } catch (error) {
       console.error('Gagal menyimpan pengiriman:', error);
-      toast.error('Gagal menyimpan pengiriman.');
+      setIsOpenError(true);
     } finally {
       setLoading(false);
     }
@@ -164,6 +168,29 @@ function ResultBuatPengiriman() {
         rightButtonText="Yakin"
         leftButtonText="Batal"
         onClickRight={handleSimpanPengiriman}
+      />
+      <Modal
+        variant="primary"
+        isOpen={isOpenSuccess}
+        closeModal={() => setIsOpenSuccess(false)}
+        description="Semua pengiriman berhasil disimpan!"
+        rightButtonText="Selesai"
+        onClickRight={navigateToPengiriman}
+      />
+      <Modal
+        variant="warning"
+        isOpen={isOpenInfo}
+        closeModal={() => setIsOpenInfo(false)}
+        description="Tidak ada pengiriman baru yang perlu disimpan"
+        rightButtonText="Tutup"
+        onClickRight={navigateToPengiriman}
+      />
+      <Modal
+        variant="danger"
+        isOpen={isOpenError}
+        closeModal={() => setIsOpenError(false)}
+        description="Gagal menyimpan pengiriman"
+        rightButtonText="Tutup"
       />
     </div>
   );

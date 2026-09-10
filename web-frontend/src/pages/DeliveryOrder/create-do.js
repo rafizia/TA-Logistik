@@ -5,16 +5,21 @@ import { Loading } from '../../components/Loading'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import { FaCalendarAlt, FaTrash, FaPlus, FaSave } from 'react-icons/fa'
-import { toast } from 'react-toastify'
 import { Button } from '../../components/Button'
 import { TextField } from '../../components/TextField'
 import { Dropdown } from '../../components/Dropdown'
+import { Modal } from '../../components/Modal'
 import jwtDecode from 'jwt-decode'
 
 function CreateDO() {
   const navigate = useNavigate()
   const location = useLocation()
   const [showLoading, setShowLoading] = useState(false)
+  const [isOpenSuccess, setIsOpenSuccess] = useState(false)
+  const [isOpenWarning, setIsOpenWarning] = useState(false)
+  const [warningDescription, setWarningDescription] = useState('')
+  const [isOpenError, setIsOpenError] = useState(false)
+  const [errorDescription, setErrorDescription] = useState('')
 
   // Master Data
   const [dcs, setDcs] = useState([])
@@ -83,8 +88,8 @@ function CreateDO() {
       setProducts(resProducts.data.data.product || [])
       setMasterDataLoaded(true)
     } catch (error) {
-      console.error('Error fetching master data:', error)
-      toast.error('Gagal memuat data master')
+      setErrorDescription('Gagal memuat data')
+      setIsOpenError(true)
     } finally {
       setShowLoading(false)
     }
@@ -162,12 +167,14 @@ function CreateDO() {
     e.preventDefault()
 
     if (!soOrigin || !doNum || !etaTarget || !dcDropdown || !customerDropdown) {
-      toast.warn('Mohon lengkapi semua field utama')
+      setWarningDescription('Mohon lengkapi semua field utama')
+      setIsOpenWarning(true)
       return
     }
 
     if (productLines.length === 0 || productLines.some(pl => !pl.product_id)) {
-      toast.warn('Mohon lengkapi data produk muatan')
+      setWarningDescription('Mohon lengkapi data produk muatan')
+      setIsOpenWarning(true)
       return
     }
 
@@ -194,11 +201,10 @@ function CreateDO() {
     setShowLoading(true)
     try {
       await axiosAuthInstance.post('/delivery-orders', payload)
-      toast.success('Delivery Order berhasil dibuat!')
-      navigate('/delivery-order')
+      setIsOpenSuccess(true)
     } catch (error) {
-      console.error('Submit error:', error)
-      toast.error(error.response?.data?.message || 'Gagal membuat Delivery Order')
+      setErrorDescription(error.response?.data?.message || 'Gagal membuat Delivery Order')
+      setIsOpenError(true)
     } finally {
       setShowLoading(false)
     }
@@ -211,6 +217,28 @@ function CreateDO() {
   return (
     <>
       <Loading visibility={showLoading} />
+      <Modal
+        variant="primary"
+        isOpen={isOpenSuccess}
+        closeModal={() => setIsOpenSuccess(false)}
+        description="Berhasil membuat Delivery Order baru"
+        rightButtonText="Selesai"
+        onClickRight={() => navigate('/delivery-order')}
+      />
+      <Modal
+        variant="warning"
+        isOpen={isOpenWarning}
+        closeModal={() => setIsOpenWarning(false)}
+        description={warningDescription}
+        rightButtonText="Tutup"
+      />
+      <Modal
+        variant="danger"
+        isOpen={isOpenError}
+        closeModal={() => setIsOpenError(false)}
+        description={errorDescription}
+        rightButtonText="Tutup"
+      />
       <div className={`px-[50px] py-[30px] ${showLoading ? 'hidden' : 'visible'}`}>
         <div className="p-8 bg-white rounded-lg">
           <h4>Masukan Data Delivery Order</h4>
