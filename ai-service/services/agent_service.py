@@ -9,6 +9,27 @@ from models.chat import ChatRequest, ChatResponse, CommandPayload, UserContext
 logger = logging.getLogger("ai_service.agent")
 
 
+def trace_agent_tools(response: Any, session_id: str) -> None:
+    """Print tool calls and results returned by the LangGraph agent."""
+    for message in response.get("messages", []):
+        tool_calls = getattr(message, "tool_calls", None) or []
+        for tool_call in tool_calls:
+            print(
+                f"[LLM TOOL CALL] session={session_id} "
+                f"name={tool_call.get('name')} "
+                f"args={json.dumps(tool_call.get('args', {}), default=str)}",
+                flush=True,
+            )
+
+        if getattr(message, "type", None) == "tool":
+            print(
+                f"[LLM TOOL RESULT] session={session_id} "
+                f"name={getattr(message, 'name', None)} "
+                f"result={message.content}",
+                flush=True,
+            )
+
+
 def build_system_context(user_context: UserContext | None, db: SQLDatabase | None) -> str | None:
     """
     Builds the dynamic system context string containing user role and DC restrictions.
@@ -185,5 +206,6 @@ async def execute_chat(agent: Any, request: ChatRequest, db: SQLDatabase | None 
     
     config = {"configurable": {"thread_id": request.session_id}}
     response = await agent.ainvoke({"messages": input_messages}, config=config)
+    # trace_agent_tools(response, request.session_id)
 
     return parse_agent_response(response, request.session_id)
