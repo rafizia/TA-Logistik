@@ -7,7 +7,7 @@ import { Loading } from '../../../components/Loading'
 import { Modal } from '../../../components/Modal'
 import { isAnyAttributeNull, checkAttributeNull } from '../../../utils/utils'
 import axiosAuthInstance from '../../../utils/axios-auth-instance'
-import LeafletMap from '../../../components/LeafletMap'
+import GoogleMap from '../../../components/GoogleMap'
 import axios from 'axios'
 import { v4 as uuidv4 } from 'uuid'
 import { useParams } from 'react-router-dom'
@@ -232,7 +232,7 @@ function ViewLokasiAdmin() {
               <TextField label="Alamat Lokasi" disabled={true} placeholder="Alamat Lokasi" required={true} className="w-full" value={detailLokasiData.address} onChange={(e) => handleInputChange('address', e.target.value)} isError={isError && checkAttributeNull(detailLokasiData.address)} />
 
               <div className={`w-full overflow-hidden p-2`} style={{ height: '300px' }}>
-                <LeafletMap
+                <GoogleMap
                   center={mapCenter}
                   zoom={15}
                   height="300px"

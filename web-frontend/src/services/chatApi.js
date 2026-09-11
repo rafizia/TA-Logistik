@@ -7,7 +7,8 @@ import axiosAuthInstance from '../utils/axios-auth-instance';
  * @returns {Promise<Object>} - Response JSON dari AI service
  */
 export async function sendChatMessage(aiBaseUrl, payload) {
-  const response = await fetch(`${aiBaseUrl}/chat`, {
+  const cleanBase = (aiBaseUrl || '').replace(/\/$/, '');
+  const response = await fetch(`${cleanBase}/chat`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

@@ -10,6 +10,7 @@ from tools.system_control import system_control
 from tools.manage_truck import get_manage_truck_tool
 from tools.manage_location import get_manage_location_tool
 from tools.manage_delivery_order import get_manage_delivery_order_tool
+from tools.automate_shipment import get_automate_shipment_tool
 
 
 class TestSystemControl:
@@ -36,6 +37,38 @@ class TestSystemControl:
         with pytest.raises(ValidationError):
             system_control.invoke({"target_page": "halaman_tidak_valid"})
 
+    def test_system_control_super_admin_restrictions(self):
+        from context import request_role
+        token = request_role.set("Super")
+        try:
+            # Super admin restricted from add_shipment
+            result = system_control.invoke({"target_page": "add_shipment"})
+            assert result["status"] == "error"
+            assert result["ui_action"] == "ERROR"
+            assert ("Access Denied" in result["message"] or "Akses ditolak" in result["message"])
+
+            # Super admin allowed on customers_list
+            result_ok = system_control.invoke({"target_page": "customers_list"})
+            assert result_ok["status"] == "success"
+        finally:
+            request_role.reset(token)
+
+    def test_system_control_admin_dc_restrictions(self):
+        from context import request_role
+        token = request_role.set("Admin DC")
+        try:
+            # Admin DC restricted from customers_list
+            result = system_control.invoke({"target_page": "customers_list"})
+            assert result["status"] == "error"
+            assert result["ui_action"] == "ERROR"
+            assert ("Access Denied" in result["message"] or "Akses ditolak" in result["message"])
+
+            # Admin DC allowed on shipments_list
+            result_ok = system_control.invoke({"target_page": "shipments_list"})
+            assert result_ok["status"] == "success"
+        finally:
+            request_role.reset(token)
+
 
 class TestManageTruck:
     @pytest.fixture
@@ -48,6 +81,7 @@ class TestManageTruck:
                 return "[(1, 'DC Jakarta'), (2, 'DC Surabaya')]"
             return "[]"
         db.run.side_effect = mock_run
+        db._engine.connect.return_value.__enter__.return_value.execute.return_value.fetchone.return_value = None
         return db
 
     @pytest.fixture
@@ -84,6 +118,44 @@ class TestManageTruck:
         assert result["status"] == "success"
         assert result["data"][0]["type_id"] == 1
         assert result["data"][0]["dc_id"] == 1
+
+    def test_create_truck_duplicate_in_db(self, manage_truck_tool, mock_db):
+        mock_db._engine.connect.return_value.__enter__.return_value.execute.return_value.fetchone.return_value = (99,)
+        data_input = {
+            "action": "CREATE",
+            "data": [{
+                "plate_number": "B 1234 CD",
+                "type_id": 1,
+                "dc_id": 1,
+                "max_individual_capacity_volume": 1200.0
+            }]
+        }
+        result = manage_truck_tool.invoke(data_input)
+        assert result["status"] == "error"
+        assert "already exists in database" in result["message"]
+
+    def test_create_truck_duplicate_in_batch(self, manage_truck_tool, mock_db):
+        mock_db._engine.connect.return_value.__enter__.return_value.execute.return_value.fetchone.return_value = None
+        data_input = {
+            "action": "CREATE",
+            "data": [
+                {
+                    "plate_number": "B 1234 CD",
+                    "type_id": 1,
+                    "dc_id": 1,
+                    "max_individual_capacity_volume": 1200.0
+                },
+                {
+                    "plate_number": "B 1234 CD",
+                    "type_id": 2,
+                    "dc_id": 1,
+                    "max_individual_capacity_volume": 2000.0
+                }
+            ]
+        }
+        result = manage_truck_tool.invoke(data_input)
+        assert result["status"] == "error"
+        assert "duplicate plate_number" in result["message"]
 
     def test_create_truck_missing_required_field(self, manage_truck_tool):
         # Missing max_individual_capacity_volume
@@ -241,7 +313,7 @@ class TestManageLocation:
         data_input = {
             "action": "UPDATE",
             "data": {
-                "id": 10,
+                "id": "loc-uuid-10",
                 "name": "Toko ABC Updated"
             }
         }
@@ -249,7 +321,7 @@ class TestManageLocation:
         assert result["status"] == "success"
         assert result["ui_action"] == "PREFILL"
         assert result["target"] == "edit_location"
-        assert result["data"]["Id"] == 10
+        assert result["data"]["Id"] == "loc-uuid-10"
 
 
 class TestManageDeliveryOrder:
@@ -324,5 +396,42 @@ class TestManageDeliveryOrder:
         assert result["target"] == "edit_delivery_order"
         assert result["data"]["id"] == 5
         assert result["data"]["status"] == "DONE"
+
+
+class TestAutomateShipment:
+    @pytest.fixture
+    def mock_db(self):
+        return MagicMock()
+
+    @pytest.fixture
+    def automate_shipment_tool(self, mock_db):
+        return get_automate_shipment_tool(mock_db)
+
+    def test_automate_shipment_success(self, automate_shipment_tool):
+        data_input = {
+            "optimization_type": "distance",
+            "delivery_order_ids": [3, 7, 15]
+        }
+        result = automate_shipment_tool.invoke(data_input)
+        assert result["ui_action"] == "PREFILL"
+        assert result["target"] == "automate_shipment"
+        assert result["data"]["optimization_type"] == "distance"
+        assert result["data"]["delivery_order_ids"] == [3, 7, 15]
+        assert result["data"]["auto_submit"] is True
+
+    def test_automate_shipment_invalid_type(self, automate_shipment_tool):
+        with pytest.raises(ValidationError):
+            automate_shipment_tool.invoke({
+                "optimization_type": "invalid_type",
+                "delivery_order_ids": [1, 2]
+            })
+
+    def test_automate_shipment_empty_ids(self, automate_shipment_tool):
+        result = automate_shipment_tool.invoke({
+            "optimization_type": "load",
+            "delivery_order_ids": []
+        })
+        assert result["ui_action"] == "ERROR"
+        assert "Missing or empty 'delivery_order_ids'" in result["message"]
 
 

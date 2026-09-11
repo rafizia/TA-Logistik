@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from "react";
-import LeafletMap from "../../components/LeafletMap";
+import GoogleMap from "../../components/GoogleMap";
 import { Modal } from "../../components/Modal";
 import axiosAuthInstance from '../../utils/axios-auth-instance';
-import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import jwtDecode from 'jwt-decode';
 
 function DetailPengiriman({ pengiriman, updatePengirimanList }) {
   const navigate = useNavigate();
   const [modalKonfirmasi, setModalKonfirmasi] = useState(false);
+  const [isOpenSuccess, setIsOpenSuccess] = useState(false);
+  const [isOpenError, setIsOpenError] = useState(false);
 
   useEffect(() => {
     // DEBUG LOGGING
@@ -50,20 +51,10 @@ function DetailPengiriman({ pengiriman, updatePengirimanList }) {
       }
       updatePengirimanList(pengiriman.shipment_num, 'saved');
       setModalKonfirmasi(false);
-      toast.success('Pengiriman berhasil disimpan!');
-      
-      let userRole = '';
-      const token = sessionStorage.getItem('token');
-      if (token) {
-        const decodedToken = jwtDecode(token);
-        userRole = decodedToken.role?.name;
-      }
-      const basePath = userRole === 'Super' ? '/administrator' : '';
-      navigate(`${basePath}/pengiriman`);
-      
+      setIsOpenSuccess(true);
     } catch (error) {
       console.error('Gagal menyimpan pengiriman:', error);
-      toast.error('Terjadi kesalahan saat menyimpan pengiriman.');
+      setIsOpenError(true);
     }
   };
 
@@ -117,7 +108,7 @@ function DetailPengiriman({ pengiriman, updatePengirimanList }) {
       ? [locationRoutes[0].latitude, locationRoutes[0].longitude]
       : [-6.2257, 106.7612];
 
-  const leafletMarkers = locationRoutes.map((route, index) => ({
+  const mapMarkers = locationRoutes.map((route, index) => ({
     lat: route.latitude,
     lng: route.longitude,
     label: index + 1,
@@ -134,12 +125,12 @@ function DetailPengiriman({ pengiriman, updatePengirimanList }) {
       <div className="bg-neutral-10 rounded-b-md p-6">
         <h2 className="text-lg font-medium mb-4">Peta Rute</h2>
         <div className="h-[400px] bg-gray-100 rounded-lg mb-4">
-          <LeafletMap
+          <GoogleMap
             center={mapCenter}
             zoom={12}
             height="400px"
             polyline={routeCoordinates}
-            markers={leafletMarkers}
+            markers={mapMarkers}
           />
         </div>
 
@@ -309,6 +300,30 @@ function DetailPengiriman({ pengiriman, updatePengirimanList }) {
         rightButtonText="Yakin"
         leftButtonText="Batal"
         onClickRight={handleSimpanPengiriman}
+      />
+      <Modal
+        variant="primary"
+        isOpen={isOpenSuccess}
+        closeModal={() => setIsOpenSuccess(false)}
+        description="Pengiriman berhasil disimpan!"
+        rightButtonText="Selesai"
+        onClickRight={() => {
+          let userRole = '';
+          const token = sessionStorage.getItem('token');
+          if (token) {
+            const decodedToken = jwtDecode(token);
+            userRole = decodedToken.role?.name;
+          }
+          const basePath = userRole === 'Super' ? '/administrator' : '';
+          navigate(`${basePath}/pengiriman`);
+        }}
+      />
+      <Modal
+        variant="danger"
+        isOpen={isOpenError}
+        closeModal={() => setIsOpenError(false)}
+        description="Terjadi kesalahan saat menyimpan pengiriman"
+        rightButtonText="Tutup"
       />
     </div>
   );

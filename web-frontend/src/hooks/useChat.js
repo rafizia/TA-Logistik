@@ -54,10 +54,7 @@ export function useChat(navigate) {
 
   /** Buat base URL AI service dari env */
   const getAiBaseUrl = () => {
-    const backendUrl = process.env.REACT_APP_BACKEND_URL;
-    return backendUrl?.includes('localhost')
-      ? 'http://localhost:8000'
-      : (backendUrl || '').replace(/\/$/, '') + '/ai/';
+    return process.env.REACT_APP_AI_URL;
   };
 
   // ─── Load sessions & initial history ─────────────────────────────────────
@@ -130,7 +127,7 @@ export function useChat(navigate) {
   };
 
   const handleDeleteSession = async (e, sessionId) => {
-    e.stopPropagation();
+    e?.stopPropagation?.();
     try {
       await apiDeleteSession(sessionId);
       await loadSessions();
@@ -239,7 +236,7 @@ export function useChat(navigate) {
       try {
         const decoded = jwtDecode(token);
         dcId = decoded.dc_id || decoded.role?.dc_id || '';
-      } catch (e) {}
+      } catch (e) { }
     }
 
     const optData = await runOptimization(doIds, optType, dcId);
@@ -273,7 +270,7 @@ export function useChat(navigate) {
     if (!ROUTE_MAP[target]) return;
 
     try {
-      const { token, userRoleName } = getUserInfoFromToken();
+      const { userRoleName } = getUserInfoFromToken();
       const basePath = userRoleName === 'Super' ? '/administrator' : '';
       let finalRoute = `${basePath}${ROUTE_MAP[target]}`;
 

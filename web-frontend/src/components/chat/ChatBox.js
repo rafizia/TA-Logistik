@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   BsXLg,
@@ -6,6 +7,7 @@ import {
   BsTrash,
 } from 'react-icons/bs';
 import { useChat } from '../../hooks/useChat';
+import { Modal } from '../Modal';
 import ChatWindow from './ChatWindow';
 import ChatInput from './ChatInput';
 
@@ -17,6 +19,7 @@ import ChatInput from './ChatInput';
  */
 export default function ChatBox({ onClose }) {
   const navigate = useNavigate();
+  const [sessionToDelete, setSessionToDelete] = useState(null);
 
   const {
     messages,
@@ -35,6 +38,18 @@ export default function ChatBox({ onClose }) {
     handleSelectSession,
     handleDeleteSession,
   } = useChat(navigate);
+
+  const requestDeleteSession = (event, sessionId) => {
+    event.stopPropagation();
+    setSessionToDelete(sessionId);
+  };
+
+  const confirmDeleteSession = async () => {
+    if (!sessionToDelete) return;
+
+    await handleDeleteSession(null, sessionToDelete);
+    setSessionToDelete(null);
+  };
 
   return (
     <div
@@ -69,7 +84,7 @@ export default function ChatBox({ onClose }) {
                     {s.title || 'Sesi Chat'}
                   </div>
                   <button
-                    onClick={(e) => handleDeleteSession(e, s.session_id)}
+                    onClick={(e) => requestDeleteSession(e, s.session_id)}
                     className={`opacity-0 group-hover:opacity-100 ${
                       s.session_id === activeSessionId ? 'text-white' : 'text-red-500'
                     } hover:text-red-700 transition-opacity`}
@@ -83,6 +98,17 @@ export default function ChatBox({ onClose }) {
           </div>
         </div>
       )}
+
+      <Modal
+        variant="danger"
+        isOpen={sessionToDelete !== null}
+        closeModal={() => setSessionToDelete(null)}
+        title="Hapus histori chat?"
+        description="Histori chat ini akan dihapus dan tidak dapat dipulihkan."
+        leftButtonText="Batal"
+        rightButtonText="Hapus"
+        onClickRight={confirmDeleteSession}
+      />
 
       {/* ── Main Chat Panel ── */}
       <div className="flex-1 flex flex-col h-full overflow-hidden">

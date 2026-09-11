@@ -4,7 +4,7 @@ import { Loading } from "../../components/Loading";
 import Button from "../../components/Button";
 import axiosAuthInstance from "../../utils/axios-auth-instance";
 import { TrukPercentage } from "../../components/TrukPercentage";
-import LeafletMap from "../../components/LeafletMap";
+import GoogleMap from "../../components/GoogleMap";
 import { Tab } from '@headlessui/react';
 import { classNames } from "../../utils/utils";
 import BaseTable, { SelectColumnFilter } from "../../components/BaseTable";
@@ -269,7 +269,7 @@ function CreatePengirimanVisualisasiCluster() {
                                                                 })),
                                                             ];
                                                             return (
-                                                                <LeafletMap
+                                                                <GoogleMap
                                                                     center={clusterCenter}
                                                                     zoom={10}
                                                                     height="400px"

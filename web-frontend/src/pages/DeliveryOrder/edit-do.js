@@ -5,15 +5,20 @@ import { Loading } from '../../components/Loading'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import { FaCalendarAlt } from 'react-icons/fa'
-import { toast } from 'react-toastify'
 import { Button } from '../../components/Button'
 import { TextField } from '../../components/TextField'
 import { Dropdown } from '../../components/Dropdown'
+import { Modal } from '../../components/Modal'
 
 function EditDO() {
   const navigate = useNavigate()
   const { doId } = useParams()
   const [showLoading, setShowLoading] = useState(false)
+  const [isOpenSuccess, setIsOpenSuccess] = useState(false)
+  const [isOpenWarning, setIsOpenWarning] = useState(false)
+  const [warningDescription, setWarningDescription] = useState('')
+  const [isOpenError, setIsOpenError] = useState(false)
+  const [errorDescription, setErrorDescription] = useState('')
 
   // Master Data
   const [dcs, setDcs] = useState([])
@@ -126,8 +131,8 @@ function EditDO() {
       }
 
     } catch (error) {
-      console.error('Error fetching master and DO data:', error)
-      toast.error('Gagal memuat data DO')
+      setErrorDescription('Gagal memuat data Delivery Order')
+      setIsOpenError(true)
     } finally {
       setShowLoading(false)
     }
@@ -138,7 +143,8 @@ function EditDO() {
     e.preventDefault()
 
     if (!customerDropdown) {
-      toast.warn('Mohon pilih Tujuan (Customer)')
+      setWarningDescription('Mohon pilih Tujuan (Customer)')
+      setIsOpenWarning(true)
       return
     }
 
@@ -150,11 +156,10 @@ function EditDO() {
     setShowLoading(true)
     try {
       await axiosAuthInstance.put(`/delivery-orders/${doId}`, payload)
-      toast.success('Delivery Order berhasil diperbarui!')
-      navigate('/delivery-order')
+      setIsOpenSuccess(true)
     } catch (error) {
-      console.error('Submit error:', error)
-      toast.error(error.response?.data?.message || 'Gagal memperbarui Delivery Order')
+      setErrorDescription(error.response?.data?.message || 'Gagal memperbarui Delivery Order')
+      setIsOpenError(true)
     } finally {
       setShowLoading(false)
     }
@@ -167,6 +172,28 @@ function EditDO() {
   return (
     <>
       <Loading visibility={showLoading} />
+      <Modal
+        variant="primary"
+        isOpen={isOpenSuccess}
+        closeModal={() => setIsOpenSuccess(false)}
+        description="Berhasil memperbarui Delivery Order"
+        rightButtonText="Selesai"
+        onClickRight={() => navigate('/delivery-order')}
+      />
+      <Modal
+        variant="warning"
+        isOpen={isOpenWarning}
+        closeModal={() => setIsOpenWarning(false)}
+        description={warningDescription}
+        rightButtonText="Tutup"
+      />
+      <Modal
+        variant="danger"
+        isOpen={isOpenError}
+        closeModal={() => setIsOpenError(false)}
+        description={errorDescription}
+        rightButtonText="Tutup"
+      />
       <div className={`px-[50px] py-[30px] ${showLoading ? 'hidden' : 'visible'}`}>
         <div className="p-8 bg-white rounded-lg">
           <h4>Edit Data Delivery Order</h4>

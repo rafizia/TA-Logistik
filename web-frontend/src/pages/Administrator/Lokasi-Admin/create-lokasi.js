@@ -7,19 +7,8 @@ import { Loading } from '../../../components/Loading'
 import { Modal } from '../../../components/Modal'
 import { checkAttributeNull } from '../../../utils/utils'
 import axiosAuthInstance from '../../../utils/axios-auth-instance'
-import LeafletMap from '../../../components/LeafletMap'
-import { useMapEvents } from 'react-leaflet'
+import GoogleMap from '../../../components/GoogleMap'
 import { BsSearch, BsGeoAlt } from 'react-icons/bs'
-
-// Komponen untuk menangkap klik pada peta
-function MapClickHandler({ onMapClick }) {
-  useMapEvents({
-    click(e) {
-      onMapClick(e.latlng.lat, e.latlng.lng)
-    }
-  })
-  return null
-}
 
 function CreateLokasiAdmin() {
   let navigate = useNavigate()
@@ -148,7 +137,7 @@ function CreateLokasiAdmin() {
     setNewLokasiData({ ...newLokasiData, [name]: value })
   }
 
-  // Geocoding: cari koordinat berdasarkan alamat menggunakan Nominatim dengan strategi fallback
+  // Geocoding: cari koordinat langsung menggunakan Google Geocoding API (single search)
   const handleGeocode = useCallback(async () => {
     const { address, desa_kelurahan, kecamatan, kabupaten_kota, provinsi, name } = newLokasiData
 
@@ -157,61 +146,66 @@ function CreateLokasiAdmin() {
       return
     }
 
-    // Strategi pencarian bertingkat: dari paling spesifik ke paling umum
-    const strategies = [
-      // 1. Coba query lengkap: alamat + kelurahan + kecamatan + kota + provinsi
-      [address, desa_kelurahan, kecamatan, kabupaten_kota, provinsi].filter(Boolean).join(', '),
-      // 2. Coba: alamat + kota + provinsi (lewati kelurahan/kecamatan)
-      [address, kabupaten_kota, provinsi].filter(Boolean).join(', '),
-      // 3. Coba: nama lokasi + kota (cocok untuk landmark/toko)
-      [name, kabupaten_kota, provinsi].filter(Boolean).join(', '),
-      // 4. Coba: hanya alamat saja
-      address,
-      // 5. Coba: hanya nama lokasi
-      name,
-    ].filter(Boolean).filter((q, i, arr) => arr.indexOf(q) === i) // hapus duplikat
+    if (!window.google?.maps?.Geocoder) {
+      setGeocodeError('Google Maps belum selesai dimuat. Tunggu beberapa detik lalu coba lagi.')
+      return
+    }
 
     setIsGeocoding(true)
     setGeocodeError(null)
 
-    const nominatimSearch = async (query) => {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&countrycodes=ID&format=json&limit=1&addressdetails=1`,
-        { headers: { 'Accept-Language': 'id' } }
-      )
-      return await res.json()
-    }
+    const queryParts = [name, address, desa_kelurahan, kecamatan, kabupaten_kota, provinsi].filter(Boolean)
+    const query = queryParts.join(', ')
 
     try {
-      let found = null
-      let successQuery = ''
-
-      for (const query of strategies) {
-        if (!query) continue
-        const results = await nominatimSearch(query)
-        if (results && results.length > 0) {
-          found = results[0]
-          successQuery = query
-          break
+      const geocoder = new window.google.maps.Geocoder()
+      geocoder.geocode(
+        {
+          address: query,
+          componentRestrictions: { country: 'ID' },
+        },
+        (results, status) => {
+          setIsGeocoding(false)
+          if (status === 'OK' && results && results.length > 0) {
+            const loc = results[0].geometry.location
+            const latNum = loc.lat()
+            const lngNum = loc.lng()
+            setMapCenter([latNum, lngNum])
+            setMapMarkers([{ lat: latNum, lng: lngNum, popup: name || address || results[0].formatted_address }])
+            setNewLokasiData((prev) => ({ ...prev, latitude: latNum, longitude: lngNum }))
+            mapKeyRef.current += 1
+          } else if (status === 'ZERO_RESULTS') {
+            // Jika query lengkap tidak ditemukan, coba cari berdasarkan alamat saja atau nama saja
+            const fallbackQuery = address || name
+            geocoder.geocode(
+              {
+                address: fallbackQuery,
+                componentRestrictions: { country: 'ID' },
+              },
+              (fallbackResults, fallbackStatus) => {
+                if (fallbackStatus === 'OK' && fallbackResults && fallbackResults.length > 0) {
+                  const loc = fallbackResults[0].geometry.location
+                  const latNum = loc.lat()
+                  const lngNum = loc.lng()
+                  setMapCenter([latNum, lngNum])
+                  setMapMarkers([{ lat: latNum, lng: lngNum, popup: name || address || fallbackResults[0].formatted_address }])
+                  setNewLokasiData((prev) => ({ ...prev, latitude: latNum, longitude: lngNum }))
+                  mapKeyRef.current += 1
+                } else {
+                  setGeocodeError('Lokasi tidak ditemukan. Pastikan nama lokasi atau alamat sudah benar.')
+                }
+              }
+            )
+          } else if (status === 'REQUEST_DENIED') {
+            setGeocodeError('Google Geocoding REQUEST_DENIED (Billing belum aktif di Google Cloud Console).')
+          } else {
+            setGeocodeError(`Pencarian gagal (${status}). Periksa koneksi internet Anda.`)
+          }
         }
-        // Delay kecil agar tidak spam ke Nominatim (rate-limit 1 req/sec)
-        await new Promise(r => setTimeout(r, 300))
-      }
-
-      if (found) {
-        const latNum = parseFloat(found.lat)
-        const lngNum = parseFloat(found.lon)
-        setMapCenter([latNum, lngNum])
-        setMapMarkers([{ lat: latNum, lng: lngNum, popup: name || address || successQuery }])
-        setNewLokasiData((prev) => ({ ...prev, latitude: latNum, longitude: lngNum }))
-        mapKeyRef.current += 1
-      } else {
-        setGeocodeError('Lokasi tidak ditemukan. Coba masukkan nama tempat/landmark yang lebih umum (contoh: "Bundaran HI" bukan "Jl. MH Thamrin No. 1").')
-      }
+      )
     } catch (err) {
-      setGeocodeError('Gagal mencari lokasi. Periksa koneksi internet Anda.')
-    } finally {
       setIsGeocoding(false)
+      setGeocodeError('Gagal mencari lokasi. Periksa koneksi internet Anda.')
     }
   }, [newLokasiData])
 
@@ -389,15 +383,14 @@ function CreateLokasiAdmin() {
               </div>
             )}
             <div className="flex-1 rounded-lg overflow-hidden" style={{ minHeight: '450px' }}>
-              <LeafletMap
+              <GoogleMap
                 key={mapKeyRef.current}
                 center={mapCenter}
                 zoom={mapMarkers.length > 0 ? 16 : 11}
                 height="100%"
                 markers={mapMarkers}
-              >
-                <MapClickHandler onMapClick={handleMapClick} />
-              </LeafletMap>
+                onMapClick={handleMapClick}
+              />
             </div>
           </div>
         </div>
@@ -412,4 +405,3 @@ function CreateLokasiAdmin() {
 }
 
 export default CreateLokasiAdmin
-
