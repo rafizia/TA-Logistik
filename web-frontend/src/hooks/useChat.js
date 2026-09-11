@@ -127,7 +127,7 @@ export function useChat(navigate) {
   };
 
   const handleDeleteSession = async (e, sessionId) => {
-    e.stopPropagation();
+    e?.stopPropagation?.();
     try {
       await apiDeleteSession(sessionId);
       await loadSessions();
